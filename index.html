@@ -1,0 +1,2100 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<!-- Self-hosted build: Firebase provides storage and sign-in (see README.md). -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-shim.js"></script>
+</head><body>
+<title>Railcar Inspection Log</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #060A05;
+    --surface: #1A1E14;
+    --surface-2: #23281A;
+    --border: #414A31;
+    --text: #B8FF6B;
+    --text-muted: #5F8A3E;
+    --accent: #9EFF1F;
+    --accent-ink: #06120A;
+    --good: #7FA83E;
+    --good-bg: rgba(127,168,62,0.16);
+    --warn: #D89614;
+    --warn-bg: rgba(216,150,20,0.18);
+    --bad: #C1432B;
+    --bad-bg: rgba(193,67,43,0.18);
+    --mono-bg: #171A10;
+    --shadow: 0 1px 0 rgba(0,0,0,0.5), 0 6px 18px rgba(0,0,0,0.4);
+    --grade-a: #7FA83E; --grade-a-bg: rgba(127,168,62,0.16);
+    --grade-b: #9BAE4D; --grade-b-bg: rgba(155,174,77,0.16);
+    --grade-c: #D89614; --grade-c-bg: rgba(216,150,20,0.16);
+    --grade-d: #B5651D; --grade-d-bg: rgba(181,101,29,0.18);
+    --grade-f: #A6281B; --grade-f-bg: rgba(166,40,27,0.2);
+  }
+  /* Daylight mode: same console, but foreground text and status colors pushed to higher
+     luminance so the screen still reads under yard glare and direct sun. Lime stays the
+     accent (short bursts of text: labels, active states) rather than body copy. */
+  :root[data-mode="daylight"] {
+    --text: #F3F6EA;
+    --text-muted: #A9B79A;
+    --good: #9FD65C;
+    --good-bg: rgba(159,214,92,0.2);
+    --warn: #FFB238;
+    --warn-bg: rgba(255,178,56,0.2);
+    --bad: #FF6B52;
+    --bad-bg: rgba(255,107,82,0.2);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    padding-inline: 16px;
+    padding-block: 0 96px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  .eyebrow {
+    font-family: "Rajdhani", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .eyebrow::before { content: "// "; opacity: 0.65; }
+  h1 {
+    font-family: "Black Ops One", "Rajdhani", sans-serif;
+    font-weight: 400;
+    font-size: 36px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 2px 0 0;
+    text-wrap: balance;
+  }
+  .sub { color: var(--text-muted); font-size: 12.5px; font-family: "IBM Plex Mono", monospace; margin: 5px 0 0; }
+  .dashlink { font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); text-decoration: none; }
+  .dashlink:hover { text-decoration: underline; }
+
+  header.top {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+    background: var(--bg);
+    padding-block: 8px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  header.top::after {
+    content: ""; display: block; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+    background: repeating-linear-gradient(135deg, var(--accent) 0 10px, var(--bg) 10px 20px);
+    opacity: 0.9;
+  }
+  .headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 6px; margin-top: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .headrow { align-items: center !important; flex-wrap: nowrap !important; }
+  .titleline { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+  .titleline h1 { font-size: 18px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titleline .eyebrow { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .infobar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; }
+  .beacon-wrap { position: relative; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .beacon-btn {
+    display: inline-flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 2px; padding: 6px 9px; cursor: pointer; font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+  }
+  .beacon-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #FFB238; }
+  .beacon-btn[data-state="live"] .beacon-dot { background: #39FF5A; box-shadow: 0 0 6px #39FF5A, 0 0 12px rgba(57,255,90,0.6); animation: beaconPulse 1.4s ease-in-out infinite; }
+  .beacon-btn[data-state="live"] { color: #39FF5A; border-color: rgba(57,255,90,0.5); }
+  .beacon-btn[data-state="degraded"] .beacon-dot, .beacon-btn[data-state="connecting"] .beacon-dot { background: #FFB238; box-shadow: 0 0 6px #FFB238; animation: beaconPulse 0.9s ease-in-out infinite; }
+  .beacon-btn[data-state="degraded"], .beacon-btn[data-state="connecting"] { color: #FFB238; border-color: rgba(255,178,56,0.5); }
+  .beacon-btn[data-state="down"] .beacon-dot { background: #FF3B30; box-shadow: 0 0 8px #FF3B30; animation: beaconPulse 0.6s steps(2, jump-none) infinite; }
+  .beacon-btn[data-state="down"] { color: #FF6B52; border-color: rgba(255,59,48,0.6); }
+  @keyframes beaconPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.25; transform: scale(0.8); } }
+  @media (prefers-reduced-motion: reduce) { .beacon-dot { animation: none !important; } }
+  .beacon-panel {
+    display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 250px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 10px 12px; box-shadow: var(--shadow);
+  }
+  .beacon-panel.open { display: block; }
+  .beacon-row { display: flex; justify-content: space-between; gap: 10px; font-family: "IBM Plex Mono", monospace; font-size: 11px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .beacon-row:last-child { border-bottom: none; }
+  .beacon-row .ok { color: #39FF5A; } .beacon-row .warn { color: #FFB238; } .beacon-row .bad { color: #FF6B52; } .beacon-row .wait { color: var(--text-muted); }
+  .stage-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stage-btn {
+    font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;
+    min-height: 48px; padding: 8px 10px; border-radius: 2px; border: 2px solid var(--border); background: var(--mono-bg);
+    color: var(--text-muted); cursor: pointer; line-height: 1.15;
+  }
+  .stage-btn small { display: block; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.02em; text-transform: none; opacity: 0.85; }
+  .stage-btn.on-after { background: var(--good); border-color: var(--good); color: var(--bg); }
+  .stage-btn.on-before { background: #4DA3FF; border-color: #4DA3FF; color: var(--bg); }
+  .stage-tag { display: inline-flex; padding: 2px 7px; border-radius: 2px; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid currentColor; }
+  .stage-tag.before { color: #4DA3FF; background: rgba(77,163,255,0.14); }
+  .baseline-note { font-size: 12px; color: #4DA3FF; background: rgba(77,163,255,0.1); border-left: 3px solid #4DA3FF; padding: 8px 10px; border-radius: 2px; }
+  .fullwrap { margin-inline: -16px; }
+  .fullnote { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--warn); padding: 0 16px 8px; }
+  .fullframe { display: block; width: 100%; height: calc(100vh - 150px); min-height: 520px; border: 0; background: #07101E; }
+  .infobar .legend { margin-top: 0; gap: 4px 12px; }
+  .infobar .legend-item { font-size: 9.5px; }
+  .tab {
+    font-family: "Rajdhani", sans-serif;
+    font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 7px 12px; border-radius: 2px; white-space: nowrap; flex-shrink: 0;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3); }
+
+  main { padding-top: 18px; display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .card h2 {
+    font-family: "Rajdhani", sans-serif;
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card h2 .bar { width: 4px; height: 16px; background: var(--accent); border-radius: 1px; display: inline-block; }
+  .hint { font-size: 12px; color: var(--text-muted); margin: -8px 0 14px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .field label .req { color: var(--bad); }
+  .field input[type="text"], .field input[type="date"], .field input[type="number"], .field select, .field textarea {
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 14px; color: var(--text);
+    background: var(--mono-bg); border: 1px solid var(--border); border-radius: 2px;
+    padding: 9px 10px; width: 100%; min-height: 44px;
+  }
+  .field textarea { min-height: 0; }
+  /* Numbers, codes and IDs stay monospace for scan-ability; free-text/name fields read
+     better in the body face, so only the code-like fields opt back into mono here. */
+  #f_railcarNumber, #f_trainNumber, #f_employeeId, #f_scheduledMin, #f_actualMin,
+  .field input[type="date"] {
+    font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field.err input, .field.err select { border-color: var(--bad); }
+  .field .errtext { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--bad); }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+
+  .checklist { display: flex; flex-direction: column; gap: 10px; }
+  .checkrow { display: flex; align-items: center; gap: 10px; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 13.5px; }
+  .checkrow input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .checkcount { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-top: 4px; }
+
+  .area-row { border-top: 1px solid var(--border); padding-block: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .area-row:first-of-type { border-top: none; padding-top: 2px; }
+  .area-name { font-family: "Rajdhani", sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+  .scorebar { display: flex; gap: 6px; }
+  .scorebtn {
+    flex: 1; text-align: center; font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 15px;
+    padding: 12px 0; min-height: 44px; border-radius: 2px; border: 2px solid var(--border); background: var(--mono-bg);
+    color: var(--text-muted); cursor: pointer; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.25);
+  }
+  .progress-track { height: 6px; background: var(--surface-2); border-radius: 2px; overflow: hidden; margin: 2px 0 14px; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .2s ease; }
+  .calib-toggle { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+  .calib-box { display: none; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 12px; color: var(--text-muted); background: var(--surface-2); border-left: 2px solid var(--accent); border-radius: 2px; padding: 8px 10px; }
+  .calib-box.open { display: block; }
+  .calib-box div + div { margin-top: 3px; }
+  .chiprow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; padding: 5px 10px; border-radius: 2px; border: 1px solid var(--border); background: var(--mono-bg); color: var(--text-muted); cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .scorebtn.sel-5, .scorebtn.sel-4 { background: var(--good); border-color: var(--good); color: var(--bg); }
+  .scorebtn.sel-3 { background: var(--warn); border-color: var(--warn); color: var(--bg); }
+  .scorebtn.sel-2, .scorebtn.sel-1 { background: var(--bad); border-color: var(--bad); color: var(--bg); }
+  .area-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .area-meta input[type="text"] { flex: 1; min-width: 160px; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 13.5px; padding: 7px 9px; border-radius: 2px; border: 1px solid var(--border); background: var(--mono-bg); color: var(--text); min-height: 40px; }
+  .photo-toggle { display: flex; align-items: center; gap: 6px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); white-space: nowrap; }
+  .photo-toggle input { accent-color: var(--accent); }
+
+  .score-summary { display: flex; gap: 16px; align-items: baseline; padding: 12px 14px; background: var(--surface-2); border-radius: 2px; margin-top: 4px; flex-wrap: wrap; }
+  .score-summary .big { font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: 700; }
+  .score-summary .lbl { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 2px; font-size: 10.5px; font-weight: 700; font-family: "IBM Plex Mono", monospace; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid currentColor; }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+  .exception-card { border: 1px solid var(--bad); border-left: 6px solid var(--bad); background: var(--bad-bg); border-radius: 2px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .exception-card .title { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--bad); }
+  .exception-card .title::before { content: "\25B2 "; }
+
+  .cert-row { display: flex; align-items: flex-start; gap: 10px; }
+  .cert-row input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+  .cert-row p { margin: 0; font-size: 13px; line-height: 1.5; }
+
+  footer.submitbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--surface);
+    border-top: 3px solid var(--accent);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .submitbar-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  .submitbtn {
+    font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 13.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    background: var(--accent); color: var(--accent-ink); border: none; border-radius: 2px;
+    padding: 12px 20px; cursor: pointer; flex-shrink: 0;
+  }
+  .submitbtn:disabled { opacity: 0.5; cursor: default; }
+  .statusmsg { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-muted); flex: 1; }
+  .statusmsg.err { color: var(--bad); }
+  .statusmsg.ok { color: var(--good); }
+
+  .logtoolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn-secondary {
+    font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 2px;
+    padding: 8px 14px; cursor: pointer;
+  }
+  .logcount { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-left: auto; }
+
+  .logitem { border: 1px solid var(--border); border-radius: 2px; padding: 12px 14px; cursor: pointer; }
+  .logitem + .logitem { margin-top: 10px; }
+  .logitem-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .logitem-title { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 13.5px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .logitem-sub { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .logitem-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; font-size: 12.5px; display: none; }
+  .logitem.open .logitem-detail { display: block; }
+  .detail-row { display: flex; justify-content: space-between; padding: 3px 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; border-bottom: 1px dashed var(--border); }
+  .detail-row:last-child { border-bottom: none; }
+  .empty {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    text-align: center; color: var(--text-muted); font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.03em; padding: 40px 10px;
+  }
+  .empty::before {
+    content: ""; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border);
+    background: radial-gradient(circle, var(--accent) 0%, transparent 70%); opacity: 0.4;
+  }
+
+  .legend { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+  .legend-item {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted);
+  }
+  .legend-item::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .legend-item.good { color: var(--good); }
+  .legend-item.warn { color: var(--warn); }
+  .legend-item.bad { color: var(--bad); }
+
+  .modebtn {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); border-radius: 2px;
+    padding: 6px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .modebtn:hover { border-color: var(--accent); color: var(--accent); }
+  .headrow-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+  .photo-block { display: flex; flex-direction: column; gap: 8px; }
+  .photo-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 2px; overflow: hidden; border: 1px solid var(--border); background: var(--mono-bg); }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-thumb .rm {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 11px; line-height: 18px; padding: 0; cursor: pointer;
+  }
+  .photo-add-label {
+    display: inline-flex; align-items: center; gap: 6px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 8px 12px; border-radius: 2px; border: 1px dashed var(--bad); color: var(--bad);
+    background: var(--surface); cursor: pointer; width: fit-content;
+  }
+  .photo-add-label input[type="file"] { display: none; }
+  .photo-uploading { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-muted); }
+  .photo-required-note { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--bad); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 620px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi-tile { background: var(--surface-2); border-radius: 2px; border-left: 3px solid var(--accent); padding: 12px 14px; }
+  .kpi-tile .val { font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 700; }
+  .kpi-tile .lbl { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  .disttable { width: 100%; border-collapse: collapse; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+  .disttable th, .disttable td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  .disttable th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .disttable td.num, .disttable th.num { text-align: right; }
+
+  .nogo-row { display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--border); padding: 10px 0; }
+  .nogo-row:first-of-type { border-top: none; padding-top: 0; }
+  .nogo-photos { display: flex; gap: 6px; flex-shrink: 0; }
+  .nogo-photos a img { width: 44px; height: 44px; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); display: block; }
+  .nogo-info { font-size: 12.5px; }
+  .nogo-info .t { font-family: "Rajdhani", sans-serif; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+  .nogo-info .s { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-muted); }
+
+  .grade-pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 2px; border: 1px solid currentColor;
+    font-size: 11.5px; font-weight: 700; font-family: "IBM Plex Mono", monospace; letter-spacing: 0.03em;
+  }
+  .grade-a { background: var(--grade-a-bg); color: var(--grade-a); }
+  .grade-b { background: var(--grade-b-bg); color: var(--grade-b); }
+  .grade-c { background: var(--grade-c-bg); color: var(--grade-c); }
+  .grade-d { background: var(--grade-d-bg); color: var(--grade-d); }
+  .grade-f { background: var(--grade-f-bg); color: var(--grade-f); }
+
+  .grade-hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .grade-badge {
+    width: 76px; height: 76px; border-radius: 4px; border: 2px solid currentColor; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Black Ops One", "Rajdhani", sans-serif; font-weight: 400; font-size: 32px;
+  }
+  .grade-hero-pct { font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: 700; }
+  .grade-hero-lbl { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .grade-hero-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; max-width: 480px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="headrow">
+      <div class="titleline">
+        <h1>Inspection Log</h1>
+        <span class="eyebrow">Metra Coach Cleaning QC</span>
+      </div>
+      <div class="beacon-wrap">
+        <button class="beacon-btn" id="beaconBtn" type="button" data-state="connecting" aria-expanded="false" aria-label="Connection status"><span class="beacon-dot"></span><span id="beaconLabel">Connecting</span></button>
+        <button class="modebtn" id="modeToggleBtn" type="button" title="Switch display mode">DAYLIGHT</button>
+        <div class="beacon-panel" id="beaconPanel"></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="new" id="tabBtnNew">New Inspection</button>
+      <button class="tab" data-tab="log" id="tabBtnLog">Log</button>
+      <button class="tab" data-tab="ca" id="tabBtnCA">Corrective Actions</button>
+      <button class="tab" data-tab="dash" id="tabBtnDash">Live Stats</button>
+      <button class="tab" data-tab="full" id="tabBtnFull">Full Dashboard</button>
+    </div>
+  </header>
+  <div class="infobar">
+    <div class="legend">
+      <span class="legend-item good">Clear &mdash; pass</span>
+      <span class="legend-item warn">Caution &mdash; monitor</span>
+      <span class="legend-item bad">Critical &mdash; corrective action</span>
+    </div>
+  </div>
+
+  <main id="viewNew"></main>
+  <main id="viewLog" style="display:none;"></main>
+  <main id="viewCA" style="display:none;"></main>
+  <main id="viewDash" style="display:none;"></main>
+  <main id="viewFull" style="display:none;"></main>
+</div>
+
+<datalist id="dl_yard"></datalist>
+<datalist id="dl_inspector"></datalist>
+<datalist id="dl_supervisor"></datalist>
+<datalist id="dl_railcar"></datalist>
+
+<footer class="submitbar" id="submitBar">
+  <div class="submitbar-inner">
+    <span class="statusmsg" id="statusMsg">Fill in the form, then submit.</span>
+    <button class="submitbtn" id="submitBtn">Transmit Inspection</button>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var AREAS = [
+    "Vestibule", "Side Loading Doors", "Bi-Parting Doors", "Lower Level Floors",
+    "Lower Level Seats", "Lower Level Windows", "Heat Registers", "Upper Level Seats",
+    "Upper Level Windows", "Upper Level Kick Plates", "Luggage Trays", "Upper Level Floors",
+    "Corners and Crevices"
+  ];
+  var CHECKLIST = [
+    "Railcar number verified", "Adequate lighting conditions", "Upper and lower levels inspected",
+    "All vestibules inspected", "All side loading doors inspected", "All bi-parting doors inspected",
+    "All seating areas inspected", "All windows inspected", "All heat registers inspected",
+    "All luggage trays inspected", "All floor surfaces inspected", "Required photographs taken"
+  ];
+  var DISTRICTS = ["MDN", "MDW", "UP-N", "UP-NW", "UP-W", "RI", "MED", "SWS", "HC", "BNSF"];
+  var SHIFTS = ["AM", "PM"];
+  var INSPECTION_TYPES = ["Routine", "Unannounced", "Complaint-Driven", "Follow-up"];
+  var TIME_OPTIONS = ["10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60", "75", "90", "105", "120"];
+
+  // ---- Real car rosters, transcribed from Metra's own car roster PDFs (car number blocks only,
+  // out-of-service/location tags stripped out by the 3-4 digit parse below). SWS and Heritage
+  // Corridor (HC) have no roster on file, so they get no typeahead rather than a guessed one.
+  // The roster PDFs on file for both Milwaukee District and Union Pacific are single combined
+  // sheets that don't separate North/West/Northwest sub-lines, so until split rosters are
+  // available, MDN/MDW share one car pool and UP-N/UP-NW/UP-W share another, rather than us
+  // guessing which cars run which line. ----
+  var CAR_ROSTER_RAW = {
+    "UP-N": "6004 6005 6008 6010 6012 6014 6015 6016 6017 6018 O UP-CAL 6019 6020 6021 6022 6023 6024 6025 6026 6027 6028 6030 6031 6032 6033 O UP-CAL 6034 6035 6036 O UP-CAL 6037 6038 6038 6039 6040 6041 6042 6043 6044 6045 6046 6047 6048 6049 6050 6051 6052 6053 6054 6055 6056 6058 6059 6060 6061 6063 6064 6065 6066 6067 6068 6069 6070 6071 6072 6073 6074 6075 6076 6077 6079 6080 6081 6082 6083 6084 6085 6086 6087 6089 6090 6091 6092 6093 6094 6095 6097 6098 6099 6100 6101 6102 6103 6104 6105 6106 6107 6108 6109 6110 6111 6112 6113 6114 6115 6116 6118 6119 6120 6121 6122 6123 6124 6126 6127 6128 6129 6131 6132 6133 6135 6136 6137 6138 6139 6140 6142 6144 6145 6146 6147 6148 O UP-CAL 6149 6151 6151 6152 6153 6154 6154 6155 O UP-CAL 6156 6157 6158 6160 6161 6162 6163 6165 6166 6167 6169 6170 6172 6173 6173 6174 6176 6177 6178 6179 6180 6181 6182 6183 6190 6194 7108 O UP-CAL 7109 7113 7119 7202 7203 O UP-CAL 7204 7205 7206 7207 7208 7209 7210 7211 7212 7213 7214 7215 7216 7219 7221 7222 7223 7224 7225 7227 7228 7229 7230 7231 O UP-CAL 7232 7234 7235 O UP-CAL 7236 O UP-CAL 7237 7239 7241 7242 7243 O UP-CAL 7244 7245 7246 7247 7248 7249 7251 7252 7253 7255 7256 7257 7258 7259 7263 7264 7265 7268 7269 7275 7277 7281 O UP-CAL 7287 7288 7294 O 7301 7304 7306 7307 7319 7320 7323 7324 7341 7372 7418 7436 7451 7462 7466 7473 7476 O UP-CAL 7480 7496 7788 7789 7795 O UP 7804 7806 7810 7811 7816 7822 7862 8231 O UP-CAL 8236 O UP-CAL 8238 O UP-CAL 8239 8244 8247 8252 O UP-CAL 8259 8260 8261 8402 8404 8405 8406 8407 8408 8410 8411 8413 8414 8415 8416 8417 8418 O RID-49TH 8419 8420 8421 8422 8423 8424 8425 8426 8427 8428 8430 8431 8433 8434 8435 8436 8437 8439 8440 O UP-CAL 8441 8442 8443 8444 O UP-CAL 8446 8447 8449 8450 8452 8453 8454 8455 8456 8457 8458 O UP-CAL 8459 8460 8461 8463 O RID-49TH 8465 8466 8467 8470 8471 8472 8476 8477 8515 8520 8526 8527 8718 8738 8743",
+    // Same combined UP roster as UP-N (see note above) -- shared source data, not a real
+    // duplicate fleet, until Metra provides rosters split by North/Northwest/West line.
+    "UP-NW": "6004 6005 6008 6010 6012 6014 6015 6016 6017 6018 O UP-CAL 6019 6020 6021 6022 6023 6024 6025 6026 6027 6028 6030 6031 6032 6033 O UP-CAL 6034 6035 6036 O UP-CAL 6037 6038 6038 6039 6040 6041 6042 6043 6044 6045 6046 6047 6048 6049 6050 6051 6052 6053 6054 6055 6056 6058 6059 6060 6061 6063 6064 6065 6066 6067 6068 6069 6070 6071 6072 6073 6074 6075 6076 6077 6079 6080 6081 6082 6083 6084 6085 6086 6087 6089 6090 6091 6092 6093 6094 6095 6097 6098 6099 6100 6101 6102 6103 6104 6105 6106 6107 6108 6109 6110 6111 6112 6113 6114 6115 6116 6118 6119 6120 6121 6122 6123 6124 6126 6127 6128 6129 6131 6132 6133 6135 6136 6137 6138 6139 6140 6142 6144 6145 6146 6147 6148 O UP-CAL 6149 6151 6151 6152 6153 6154 6154 6155 O UP-CAL 6156 6157 6158 6160 6161 6162 6163 6165 6166 6167 6169 6170 6172 6173 6173 6174 6176 6177 6178 6179 6180 6181 6182 6183 6190 6194 7108 O UP-CAL 7109 7113 7119 7202 7203 O UP-CAL 7204 7205 7206 7207 7208 7209 7210 7211 7212 7213 7214 7215 7216 7219 7221 7222 7223 7224 7225 7227 7228 7229 7230 7231 O UP-CAL 7232 7234 7235 O UP-CAL 7236 O UP-CAL 7237 7239 7241 7242 7243 O UP-CAL 7244 7245 7246 7247 7248 7249 7251 7252 7253 7255 7256 7257 7258 7259 7263 7264 7265 7268 7269 7275 7277 7281 O UP-CAL 7287 7288 7294 O 7301 7304 7306 7307 7319 7320 7323 7324 7341 7372 7418 7436 7451 7462 7466 7473 7476 O UP-CAL 7480 7496 7788 7789 7795 O UP 7804 7806 7810 7811 7816 7822 7862 8231 O UP-CAL 8236 O UP-CAL 8238 O UP-CAL 8239 8244 8247 8252 O UP-CAL 8259 8260 8261 8402 8404 8405 8406 8407 8408 8410 8411 8413 8414 8415 8416 8417 8418 O RID-49TH 8419 8420 8421 8422 8423 8424 8425 8426 8427 8428 8430 8431 8433 8434 8435 8436 8437 8439 8440 O UP-CAL 8441 8442 8443 8444 O UP-CAL 8446 8447 8449 8450 8452 8453 8454 8455 8456 8457 8458 O UP-CAL 8459 8460 8461 8463 O RID-49TH 8465 8466 8467 8470 8471 8472 8476 8477 8515 8520 8526 8527 8718 8738 8743",
+    "UP-W": "6004 6005 6008 6010 6012 6014 6015 6016 6017 6018 O UP-CAL 6019 6020 6021 6022 6023 6024 6025 6026 6027 6028 6030 6031 6032 6033 O UP-CAL 6034 6035 6036 O UP-CAL 6037 6038 6038 6039 6040 6041 6042 6043 6044 6045 6046 6047 6048 6049 6050 6051 6052 6053 6054 6055 6056 6058 6059 6060 6061 6063 6064 6065 6066 6067 6068 6069 6070 6071 6072 6073 6074 6075 6076 6077 6079 6080 6081 6082 6083 6084 6085 6086 6087 6089 6090 6091 6092 6093 6094 6095 6097 6098 6099 6100 6101 6102 6103 6104 6105 6106 6107 6108 6109 6110 6111 6112 6113 6114 6115 6116 6118 6119 6120 6121 6122 6123 6124 6126 6127 6128 6129 6131 6132 6133 6135 6136 6137 6138 6139 6140 6142 6144 6145 6146 6147 6148 O UP-CAL 6149 6151 6151 6152 6153 6154 6154 6155 O UP-CAL 6156 6157 6158 6160 6161 6162 6163 6165 6166 6167 6169 6170 6172 6173 6173 6174 6176 6177 6178 6179 6180 6181 6182 6183 6190 6194 7108 O UP-CAL 7109 7113 7119 7202 7203 O UP-CAL 7204 7205 7206 7207 7208 7209 7210 7211 7212 7213 7214 7215 7216 7219 7221 7222 7223 7224 7225 7227 7228 7229 7230 7231 O UP-CAL 7232 7234 7235 O UP-CAL 7236 O UP-CAL 7237 7239 7241 7242 7243 O UP-CAL 7244 7245 7246 7247 7248 7249 7251 7252 7253 7255 7256 7257 7258 7259 7263 7264 7265 7268 7269 7275 7277 7281 O UP-CAL 7287 7288 7294 O 7301 7304 7306 7307 7319 7320 7323 7324 7341 7372 7418 7436 7451 7462 7466 7473 7476 O UP-CAL 7480 7496 7788 7789 7795 O UP 7804 7806 7810 7811 7816 7822 7862 8231 O UP-CAL 8236 O UP-CAL 8238 O UP-CAL 8239 8244 8247 8252 O UP-CAL 8259 8260 8261 8402 8404 8405 8406 8407 8408 8410 8411 8413 8414 8415 8416 8417 8418 O RID-49TH 8419 8420 8421 8422 8423 8424 8425 8426 8427 8428 8430 8431 8433 8434 8435 8436 8437 8439 8440 O UP-CAL 8441 8442 8443 8444 O UP-CAL 8446 8447 8449 8450 8452 8453 8454 8455 8456 8457 8458 O UP-CAL 8459 8460 8461 8463 O RID-49TH 8465 8466 8467 8470 8471 8472 8476 8477 8515 8520 8526 8527 8718 8738 8743",
+    RI: "6001 6007 6009 6011 6029 6134 6192 7116 O UP 7117 O RID-51ST 7262 7276 7296 7308 7310 7312 7313 7315 7322 7331 7335 7346 7347 7348 7350 7352 7353 7354 7355 O RID-51ST 7356 7357 7358 7359 7360 7361 7362 7363 7364 7365 7366 7367 7370 7371 7373 7374 7375 7376 7377 7378 7379 7381 7400 O RID-49TH 7406 7461 7463 7474 7475 7477 7479 7483 7485 7486 7487 O 7490 7492 7493 7497 7787 RID-51ST 7794 RID 8235 8241 8246 8254 8265 8267 8268 8269 8270 8271 8272 8478 8504 8507 8534 8536 8547 8549 8550 8551 8552 8554 8555 8556 8558 8559 8560 8561 8562 8563 8565 8566 8567 8568 8570 8571 8574 8576 RID-51ST 8580 8597 8598",
+    MDN: "6002 6003 6006 6013 6057 6088 6096 6117 6125 6130 6141 6143 6150 6159 6164 6168 6171 6175 6187 6193 6201 6202 6203 6204 6205 6206 6207 7217 7218 7233 7240 7250 7273 7274 7279 7282 7285 O MWD 7289 7290 7291 7292 7293 7297 7298 7299 7300 7302 7303 7305 7309 7311 7314 7318 7325 7326 O MWD 7328 7333 7336 7337 7338 7340 7343 7349 7405 7417 7427 7430 7431 7432 7433 7434 7435 7437 7439 7441 7442 7443 7447 7448 7449 7450 7453 7454 7455 7456 7457 7464 7467 7470 7478 7482 7484 7491 7494 7495 7659 MWD-ANT 7664 MWD-ANT 7801 O MWD 7868 O MWD 7885 O MWD 8200 8201 8202 8203 8204 8205 8206 8207 8208 8209 8210 8211 8212 8213 8214 8215 8216 O MWD 8217 8219 8220 8221 8223 8225 8226 8229 8230 8233 8234 8240 8242 8245 8248 8250 8253 8255 O MWD 8256 8257 8258 8262 8263 8264 8273 8400 O RID 8401 8403 8412 8451 8462 8464 8468 8501 8502 8503 8505 8506 8508 O MWD 8509 8510 8511 8512 8513 8514 8516 8517 8517 8519 8519 8521 8522 8523 8524 8525 8525 8528 8528 8529 8530 8531 8531 8532 8533 8535 8535 8537 8538 8539 8540 8541 8542 8543 8544 8546 8548 8553 8557 8564 8569 8572 8573 8575 8582 8582 8587 8608 8749 O MWD",
+    // Same combined MWD roster as MDN (see note above) -- not a real duplicate fleet, just the
+    // same unsplit source data offered on both districts until Metra provides a split roster.
+    MDW: "6002 6003 6006 6013 6057 6088 6096 6117 6125 6130 6141 6143 6150 6159 6164 6168 6171 6175 6187 6193 6201 6202 6203 6204 6205 6206 6207 7217 7218 7233 7240 7250 7273 7274 7279 7282 7285 O MWD 7289 7290 7291 7292 7293 7297 7298 7299 7300 7302 7303 7305 7309 7311 7314 7318 7325 7326 O MWD 7328 7333 7336 7337 7338 7340 7343 7349 7405 7417 7427 7430 7431 7432 7433 7434 7435 7437 7439 7441 7442 7443 7447 7448 7449 7450 7453 7454 7455 7456 7457 7464 7467 7470 7478 7482 7484 7491 7494 7495 7659 MWD-ANT 7664 MWD-ANT 7801 O MWD 7868 O MWD 7885 O MWD 8200 8201 8202 8203 8204 8205 8206 8207 8208 8209 8210 8211 8212 8213 8214 8215 8216 O MWD 8217 8219 8220 8221 8223 8225 8226 8229 8230 8233 8234 8240 8242 8245 8248 8250 8253 8255 O MWD 8256 8257 8258 8262 8263 8264 8273 8400 O RID 8401 8403 8412 8451 8462 8464 8468 8501 8502 8503 8505 8506 8508 O MWD 8509 8510 8511 8512 8513 8514 8516 8517 8517 8519 8519 8521 8522 8523 8524 8525 8525 8528 8528 8529 8530 8531 8531 8532 8533 8535 8535 8537 8538 8539 8540 8541 8542 8543 8544 8546 8548 8553 8557 8564 8569 8572 8573 8575 8582 8582 8587 8608 8749 O MWD",
+    BNSF: "6062 6078 O 6184 6185 6186 6188 6189 6191 O BNSF 7100 7101 7102 7104 O 7105 7106 7107 7110 7111 7112 7114 7115 O 7118 7120 7121 7201 7220 7226 7238 7254 7260 7261 7266 7267 7270 7271 7272 7278 7280 7283 7284 O 7286 7295 O RID-49TH 7316 7317 7321 7327 O 7329 7330 7332 7334 7339 7342 7344 7345 7369 7380 7401 7402 7403 7404 7407 7408 7409 741 7410 7411 7412 7413 O BNSF 7414 7415 7416 7419 O BNSF 742 7420 7422 7423 7424 7425 7426 7428 7429 743 7438 744 7440 7444 O RID-49TH 7445 7446 7452 7458 7459 746 7460 7465 7468 7469 747 7471 7472 O RID-49TH 748 7481 7489 749 O BNSF 750 O 751 753 O 755 756 O RID-49TH 757 758 759 760 761 762 763 O 764 765 766 767 O 768 769 O 770 771 772 773 774 775 776 777 778 779 7791 O METRA 780 782 O 783 784 785 786 787 798 799 801 803 804 805 808 809 810 811 812 813 814 815 816 817 818 O 819 820 8218 8224 8227 8228 O 8232 8237 8243 8251 8274 8275 8409 8429 O BNSF 8432 O 8438 8445 8448 8469 8474 8475 8518 8545 8577 8578 8579 8581 8583 8584 8585 8586 8588 8589 8590 8591 8592 8593 8593 8594 8595 8596 8599 8599 8600 8601 8602 8602 8603 O 8603 O W 8604 O BNSF 8605 8606 8607",
+    MED: "1227 O MED-18TH-ST 1228 1229 O MED-18TH-ST 1230 1231 1232 1233 O MED-18TH-ST 1233 O W MED-18TH-ST 1234 1235 1236 1237 1238 1239 1240 1241 1241 1242 O MED-18TH-ST 1243 1244 1245 1246 O MED-RP 1247 1248 1249 1250 1251 1253 1254 1255 1256 O MED-18TH-ST 1257 1258 1259 1260 1261 1262 O MED-KYD 1263 1264 O MED-RP 1265 O MED-18TH-ST 1266 1267 1268 1270 1271 1273 1274 1275 O MED-18TH-ST 1276 1277 1278 1279 1280 1281 1282 1282 1283 1284 1285 1286 1287 O MED-18TH-ST 1288 1289 1290 1291 1292 1293 1295 1296 1297 1298 1299 1300 1301 1302 1303 1304 1305 1307 1308 O MED-RP 1310 1311 1312 O MED-18TH-ST 1313 1314 1315 1316 O MED-18TH-ST 1317 1318 1319 1320 O MED-KYD 1321 1322 1323 1324 1325 1326 1327 1328 1329 1330 1331 1332 1333 1334 O MED-KYD 1335 1336 1337 1338 1338 1339 1340 O MED-KYD 1341 O MED-RP 1342 O MED-KYD 1343 1346 1347 1348 1349 O MED-18TH-ST 1350 1351 1352 1353 O MED-KYD 1354 O MED-KYD 1356 1357 1358 1359 1360 1361 1362 1363 1364 1365 1367 1368 1369 1370 1372 O MED-18TH-ST 1372 O W MED-18TH-ST 1373 1374 O MED-RP 1375 1376 1377 1377 1378 O MED-18TH-ST 1378 O W MED-18TH-ST 1379 1380 1381 O MED-KYD 1382 1383 1383 1384 1385 1386"
+  };
+  function parseCarNumbers(raw) {
+    var matches = raw.match(/\d{3,4}/g) || [];
+    var seen = {}, out = [];
+    matches.forEach(function (n) { if (!seen[n]) { seen[n] = 1; out.push(n); } });
+    return out;
+  }
+  var CAR_ROSTER = {};
+  Object.keys(CAR_ROSTER_RAW).forEach(function (k) { CAR_ROSTER[k] = parseCarNumbers(CAR_ROSTER_RAW[k]); });
+
+  // Real yard/location codes pulled from the same roster PDFs' out-of-service location tags.
+  // The Antioch Yard tag comes from the single combined MWD roster, which doesn't say whether
+  // it's a North or West Line facility -- offered on both until that's confirmed.
+  var YARD_HINTS = {
+    // Same combined UP yard list on all three -- shared source data, not confirmed
+    // per line, until Metra provides yard assignments split by North/Northwest/West.
+    "UP-N": ["OTC (Ogilvie Transportation Center)", "California Ave (UP-CAL)", "M19A"],
+    "UP-NW": ["OTC (Ogilvie Transportation Center)", "California Ave (UP-CAL)", "M19A"],
+    "UP-W": ["OTC (Ogilvie Transportation Center)", "California Ave (UP-CAL)", "M19A"],
+    HC: [],
+    RI: ["49th St Yard (RID-49TH)", "51st St Yard (RID-51ST)"],
+    MDN: ["Antioch Yard (MWD-ANT)"],
+    MDW: ["Antioch Yard (MWD-ANT)"],
+    MED: ["18th Street Yard (MED-18TH ST)", "Kensington / KYD (MED-KYD)", "Randolph St Terminal (MED-RP)"],
+    BNSF: [],
+    SWS: []
+  };
+
+  var DEFECT_TAGS = ["Trash/Debris", "Stains", "Odor", "Graffiti", "Smudged Glass", "Damaged Seat", "Damaged Fixture", "Biohazard"];
+
+  // ---- Corrective-action lifecycle. A CA is its own record, not a text field, so reinspection
+  // pass rate / repeat-defect rate can be computed from real linked data instead of by hand. ----
+  var CA_STATUSES = ["Open", "In Progress", "Completed", "Verified"];
+
+  // Operational scoring rubric (a working guide, not a verbatim manual quote) so multiple
+  // inspectors converge on the same score for the same condition.
+  var SCORE_GUIDE = {
+    5: "Excellent — no visible soil, debris, or damage. Ready for service as-is.",
+    4: "Good — minor cosmetic issue only (light dust, one small mark). Doesn't require correction before service.",
+    3: "Fair — noticeable soil or wear in an isolated spot. Address same shift, not service-affecting.",
+    2: "Major Exception — soiling or damage affects passenger comfort or is highly visible. Needs corrective action and a photo.",
+    1: "NO-GO — condition makes the area unusable, unsanitary, or unsafe. Car should not enter service until corrected."
+  };
+
+  // Cleaning stage: "After" = scored after the turn cleaning, before departure (grades the crew).
+  // "Before" = scored on arrival, before any cleaning (baseline of what the run left behind).
+  // Older records have no stage and are treated as After, since that's what they were.
+  function isBaseline(d) { return d && d.cleaningStage === "Before"; }
+  function graded(docs) { return (docs || []).filter(function (d) { return !isBaseline(d); }); }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  // ---- Remember the last-used inspector/supervisor/district/shift so a repeat inspector
+  // doesn't retype the same fields on every car. Per-device only; never read back by Claude. ----
+  var LAST_USED_KEY = "railcarInspectionLastUsed";
+  function loadLastUsed() {
+    try {
+      var raw = window.localStorage && localStorage.getItem(LAST_USED_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+  function saveLastUsed(s) {
+    try {
+      if (!window.localStorage) return;
+      localStorage.setItem(LAST_USED_KEY, JSON.stringify({
+        inspectorName: s.inspectorName, supervisor: s.supervisor, district: s.district,
+        shift: s.shift, employeeId: s.employeeId, cleaningStage: s.cleaningStage
+      }));
+    } catch (e) {}
+  }
+
+  // ---- Display mode: tactical (dark/lime, default) or daylight (high-contrast for outdoor glare).
+  // Per-device only; never read back by Claude. ----
+  var DISPLAY_MODE_KEY = "railcarInspectionDisplayMode";
+  function loadDisplayMode() {
+    try {
+      var m = window.localStorage && localStorage.getItem(DISPLAY_MODE_KEY);
+      return m === "daylight" ? "daylight" : "tactical";
+    } catch (e) { return "tactical"; }
+  }
+  function saveDisplayMode(mode) {
+    try { if (window.localStorage) localStorage.setItem(DISPLAY_MODE_KEY, mode); } catch (e) {}
+  }
+  function applyDisplayMode(mode) {
+    document.documentElement.setAttribute("data-mode", mode === "daylight" ? "daylight" : "tactical");
+    var btn = document.getElementById("modeToggleBtn");
+    if (btn) btn.textContent = mode === "daylight" ? "TACTICAL" : "DAYLIGHT";
+  }
+
+  function freshState() {
+    var last = loadLastUsed();
+    return {
+      railcarNumber: "", trainNumber: "", date: todayStr(), district: last.district || "", yard: "",
+      shift: last.shift || "AM", inspectionType: "Routine", inspectorName: last.inspectorName || "", supervisor: last.supervisor || "",
+      employeeId: last.employeeId || "", scheduledMin: "", actualMin: "", reinspectsCaId: "", jiraTicket: "",
+      cleaningStage: last.cleaningStage === "Before" ? "Before" : "After",
+      checklist: CHECKLIST.map(function () { return false; }),
+      areas: AREAS.map(function (name) { return { name: name, score: null, comments: "", photo: false, exceptionAction: "", exceptionPhotos: [] }; }),
+      certify: false, certName: "", certDate: todayStr(),
+    };
+  }
+
+  var state = freshState();
+  var errors = {};
+  var db = null, downloadsCap = null, assetsCap = null;
+  var logDocs = [];
+  var logUnsub = null;
+  var caDocs = [];
+  var caUnsub = null;
+  var uploadingCount = 0;
+  var currentTab = "new";
+  var monthlyTargets = {};
+  var targetsUnsub = null;
+  var dupWarningShown = false;
+
+  // ---- Live connection beacon ----
+  // Green (blinking) = every source connected. Amber = page works but a source is degraded or
+  // still connecting. Red = no network or the inspection database is unreachable (can't submit).
+  var SOURCES = [
+    { key: "network", label: "Network" },
+    { key: "db", label: "Inspection database" },
+    { key: "log", label: "Inspection log feed" },
+    { key: "ca", label: "Corrective action feed" },
+    { key: "targets", label: "Monthly targets" },
+    { key: "assets", label: "Photo storage" },
+    { key: "downloads", label: "CSV export" }
+  ];
+  var CRITICAL_SOURCES = { network: 1, db: 1 };
+  var sourceState = {};
+  SOURCES.forEach(function (src) { sourceState[src.key] = "wait"; });
+  sourceState.network = navigator.onLine === false ? "bad" : "ok";
+  function setSource(key, st) {
+    if (sourceState[key] === st) return;
+    sourceState[key] = st;
+    renderBeacon();
+  }
+  function renderBeacon() {
+    var btn = document.getElementById("beaconBtn");
+    if (!btn) return;
+    var keys = SOURCES.map(function (x) { return x.key; });
+    var critDown = keys.some(function (k) { return CRITICAL_SOURCES[k] && sourceState[k] === "bad"; });
+    var anyBad = keys.some(function (k) { return sourceState[k] === "bad" || sourceState[k] === "warn"; });
+    var anyWait = keys.some(function (k) { return sourceState[k] === "wait"; });
+    var state = critDown ? "down" : (anyBad ? "degraded" : (anyWait ? "connecting" : "live"));
+    var label = { down: "Offline", degraded: "Degraded", connecting: "Connecting", live: "Live" }[state];
+    btn.setAttribute("data-state", state);
+    document.getElementById("beaconLabel").textContent = label;
+    var words = { ok: "Connected", warn: "Issue", bad: "Disconnected", wait: "Connecting" };
+    var cls = { ok: "ok", warn: "warn", bad: "bad", wait: "wait" };
+    document.getElementById("beaconPanel").innerHTML = SOURCES.map(function (x) {
+      var st = sourceState[x.key];
+      return '<div class="beacon-row"><span>' + esc(x.label) + '</span><span class="' + cls[st] + '">' + words[st] + '</span></div>';
+    }).join("");
+  }
+  window.addEventListener("online", function () { setSource("network", "ok"); });
+  window.addEventListener("offline", function () { setSource("network", "bad"); });
+  // Anything still "connecting" after 12 seconds is treated as failed, so the beacon never
+  // sits amber forever on a source that silently never answered.
+  setTimeout(function () {
+    SOURCES.forEach(function (x) {
+      if (sourceState[x.key] === "wait") setSource(x.key, CRITICAL_SOURCES[x.key] ? "bad" : "warn");
+    });
+  }, 12000);
+
+  // ---- capability bootstrap ----
+  function bootCapabilities() {
+    if (!(window.claude && window.claude.use)) {
+      ["db", "log", "ca", "targets"].forEach(function (k) { setSource(k, "bad"); });
+      setSource("assets", "bad"); setSource("downloads", "bad");
+      return;
+    }
+    window.claude.use("db").then(function (d) { db = d; setSource("db", "ok"); setStatus("Ready. Fill in the form, then submit."); subscribeLog(); subscribeCA(); subscribeTargets(); })
+      .catch(function () { setSource("db", "bad"); setSource("log", "bad"); setSource("ca", "bad"); setSource("targets", "bad"); });
+    window.claude.use("downloads").then(function (d) { downloadsCap = d; setSource("downloads", "ok"); }).catch(function () { setSource("downloads", "bad"); });
+    window.claude.use("assets").then(function (a) { assetsCap = a; setSource("assets", "ok"); }).catch(function () { setSource("assets", "bad"); });
+  }
+
+  // ---- helpers ----
+  function scoreColor(score) {
+    if (score === null) return "";
+    return "sel-" + score;
+  }
+  function pillClassFor(avg) {
+    if (avg === null) return "warn";
+    if (avg >= 4) return "good";
+    if (avg >= 3) return "warn";
+    return "bad";
+  }
+  function computeTotals(areas) {
+    var scored = areas.filter(function (a) { return a.score !== null; });
+    var total = scored.reduce(function (s, a) { return s + a.score; }, 0);
+    var avg = scored.length ? (total / scored.length) : null;
+    var criticals = areas.filter(function (a) { return a.score !== null && a.score <= 2; });
+    return { total: total, avg: avg, scoredCount: scored.length, criticals: criticals };
+  }
+
+  // ---- Grading: every inspection starts at A (100) and loses points for what's found ----
+  var GRADE_DEDUCTIONS = { 5: 0, 4: 2, 3: 5, 2: 10, 1: 25 };
+  // Bands with +/- tiers. F has no modifier -- once it's failing, the +/- distinction
+  // doesn't matter operationally.
+  var GRADE_BANDS = [
+    // Standard 90/80/70/60 scale: A 90-100, B 80-89, C 70-79, D 60-69, F below 60.
+    // Within each band: +  = top 3 points (x7-x9, A+ 97-100), plain = middle, - = bottom 3 (x0-x2).
+    { min: 97, letter: "A+" }, { min: 93, letter: "A" }, { min: 90, letter: "A-" },
+    { min: 87, letter: "B+" }, { min: 83, letter: "B" }, { min: 80, letter: "B-" },
+    { min: 77, letter: "C+" }, { min: 73, letter: "C" }, { min: 70, letter: "C-" },
+    { min: 67, letter: "D+" }, { min: 63, letter: "D" }, { min: 60, letter: "D-" },
+    { min: -Infinity, letter: "F" }
+  ];
+  function letterForPct(pct) {
+    for (var i = 0; i < GRADE_BANDS.length; i++) {
+      if (pct >= GRADE_BANDS[i].min) return GRADE_BANDS[i].letter;
+    }
+    return "F";
+  }
+  function baseLetter(letter) {
+    return letter.charAt(0);
+  }
+  // A NO-GO (1) or major exception (2) anywhere caps the letter at C, no matter what the
+  // remaining math says. A blended average can hide a single unacceptable defect; this can't.
+  // Scores already at C or below keep their own letter.
+  function capForCritical(letter, hasCritical) {
+    if (hasCritical && (baseLetter(letter) === "A" || baseLetter(letter) === "B")) return "C";
+    return letter;
+  }
+  function computeGrade(areas) {
+    var scored = areas.filter(function (a) { return a.score !== null; });
+    var deduction = scored.reduce(function (s, a) { return s + (GRADE_DEDUCTIONS[a.score] || 0); }, 0);
+    var pct = Math.max(0, 100 - deduction);
+    var hasCritical = areas.some(function (a) { return a.score !== null && a.score <= 2; });
+    return { pct: pct, letter: capForCritical(letterForPct(pct), hasCritical), hasCritical: hasCritical };
+  }
+  function gradeHtml(letter, extra) {
+    return '<span class="grade-pill grade-' + baseLetter(letter).toLowerCase() + '">' + letter + (extra ? " &middot; " + extra : "") + '</span>';
+  }
+  function setStatus(msg, kind) {
+    var el = document.getElementById("statusMsg");
+    el.textContent = msg;
+    el.className = "statusmsg" + (kind ? " " + kind : "");
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- render: New Inspection form ----
+  function renderNew() {
+    var totals = computeTotals(state.areas);
+    var html = "";
+
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Inspection Details</h2>';
+    var isBefore = state.cleaningStage === "Before";
+    html += '<div class="field' + (errors.cleaningStage ? " err" : "") + '" style="margin-bottom:12px;"><label>When is this car being scored? <span class="req">*</span></label>';
+    html += '<div class="stage-toggle">';
+    html += '<button type="button" class="stage-btn' + (!isBefore ? " on-after" : "") + '" data-stage="After">After cleaning<small>Pre-departure &middot; grades the crew</small></button>';
+    html += '<button type="button" class="stage-btn' + (isBefore ? " on-before" : "") + '" data-stage="Before">Before cleaning<small>On arrival &middot; baseline only</small></button>';
+    html += '</div>';
+    if (errors.cleaningStage) html += '<span class="errtext">' + esc(errors.cleaningStage) + '</span>';
+    html += '</div>';
+    if (isBefore) html += '<div class="baseline-note" style="margin-bottom:12px;">Arrival baseline: records what the run left behind. It does not count toward crew, yard or district grades, and low scores do not open corrective actions.</div>';
+    html += '<div class="grid3">';
+    html += field("railcarNumber", "Railcar Number", true, '<input type="text" class="mono" id="f_railcarNumber" list="dl_railcar" placeholder="e.g. 7714" value="' + esc(state.railcarNumber) + '">');
+    html += field("trainNumber", "Train Number", false, '<input type="text" class="mono" id="f_trainNumber" placeholder="e.g. UP-204" value="' + esc(state.trainNumber) + '">');
+    html += field("date", "Date", true, '<input type="date" id="f_date" value="' + esc(state.date) + '">');
+    html += '</div>';
+    html += '<div class="grid3" style="margin-top:12px;">';
+    html += field("district", "District", true, selectHtml("f_district", DISTRICTS, state.district, "Select"));
+    html += field("yard", "Yard / Location", false, '<input type="text" id="f_yard" list="dl_yard" placeholder="e.g. California Ave" value="' + esc(state.yard) + '">');
+    html += field("shift", "Shift", false, selectHtml("f_shift", SHIFTS, state.shift));
+    html += '</div>';
+    html += '<div class="grid3" style="margin-top:12px;">';
+    html += field("inspectionType", "Inspection Type", false, selectHtml("f_inspectionType", INSPECTION_TYPES, state.inspectionType));
+    html += field("inspectorName", "Inspector Name", true, '<input type="text" id="f_inspectorName" list="dl_inspector" value="' + esc(state.inspectorName) + '">');
+    html += field("supervisor", "Supervisor", false, '<input type="text" id="f_supervisor" list="dl_supervisor" value="' + esc(state.supervisor) + '">');
+    html += '</div>';
+    html += '<div class="grid3" style="margin-top:12px;">';
+    html += field("employeeId", "Employee ID", false, '<input type="text" class="mono" id="f_employeeId" placeholder="e.g. 40213" value="' + esc(state.employeeId) + '">');
+    html += field("scheduledMin", "Scheduled Time (min)", false, selectHtml("f_scheduledMin", TIME_OPTIONS, state.scheduledMin, "Select"));
+    html += field("actualMin", "Actual Time (min)", false, selectHtml("f_actualMin", TIME_OPTIONS, state.actualMin, "Select"));
+    html += '</div>';
+    if (state.inspectionType === "Follow-up") {
+      html += '<div class="grid3" style="margin-top:12px;">';
+      html += field("reinspectsCaId", "Reinspecting Corrective Action", true, caSelectHtml(state.reinspectsCaId));
+      html += '</div>';
+      html += '<p class="hint" style="margin-top:8px;margin-bottom:0;">Pick the open corrective action this car is being rechecked for. Scoring the same area 3+ here closes it out as a Pass; scoring it 1&ndash;2 again logs a Repeat Defect and reopens it.</p>';
+    }
+    if (state.inspectionType === "Complaint-Driven") {
+      html += '<div class="grid3" style="margin-top:12px;">';
+      html += field("jiraTicket", "Related Jira Ticket", false, '<input type="text" class="mono" id="f_jiraTicket" placeholder="e.g. MTRA-4821" value="' + esc(state.jiraTicket) + '">');
+      html += '</div>';
+      html += '<p class="hint" style="margin-top:8px;margin-bottom:0;">Jira stays the system of record for the complaint itself &mdash; this just links the ticket key so complaint and inspection data can be joined later.</p>';
+    }
+    html += '</div>';
+
+    var checkedCount = state.checklist.filter(Boolean).length;
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Inspector Checklist</h2>';
+    html += '<div class="checklist">';
+    CHECKLIST.forEach(function (label, i) {
+      html += '<label class="checkrow"><input type="checkbox" data-checklist="' + i + '" ' + (state.checklist[i] ? "checked" : "") + '>' + esc(label) + '</label>';
+    });
+    html += '</div>';
+    html += '<div class="checkcount">' + checkedCount + ' of ' + CHECKLIST.length + ' confirmed</div>';
+    html += '</div>';
+
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Cleanliness Scoring (1&ndash;5)</h2>';
+    html += '<p class="hint">' + (state.cleaningStage === "Before"
+      ? '1 = Poor, 5 = Excellent. Arrival baseline: score what you see; no corrective action or photo required.'
+      : '1 = Poor, 5 = Excellent. A score of 1 or 2 opens a corrective action right below it and needs a photo.') + '</p>';
+    html += '<div class="progress-track"><div class="progress-fill" style="width:' + (AREAS.length ? Math.round(totals.scoredCount / AREAS.length * 100) : 0) + '%;"></div></div>';
+    state.areas.forEach(function (area, i) {
+      html += '<div class="area-row" data-area-row="' + i + '">';
+      html += '<div class="area-name">' + esc(area.name) + '</div>';
+      html += '<div class="scorebar">';
+      [1, 2, 3, 4, 5].forEach(function (n) {
+        html += '<button type="button" class="scorebtn ' + (area.score === n ? scoreColor(n) : "") + '" data-area="' + i + '" data-score="' + n + '">' + n + '</button>';
+      });
+      html += '</div>';
+      html += '<button type="button" class="calib-toggle" data-calib-toggle="' + i + '">What does each score mean?</button>';
+      html += '<div class="calib-box" data-calib-box="' + i + '">';
+      [5, 4, 3, 2, 1].forEach(function (n) {
+        html += '<div><strong>' + n + '</strong> &mdash; ' + esc(SCORE_GUIDE[n]) + '</div>';
+      });
+      html += '</div>';
+      html += '<div class="area-meta">';
+      html += '<input type="text" placeholder="Comments (optional)" data-area-comment="' + i + '" value="' + esc(area.comments) + '">';
+      html += '<label class="photo-toggle"><input type="checkbox" data-area-photo="' + i + '" ' + (area.photo ? "checked" : "") + '> Photo taken</label>';
+      html += '</div>';
+      html += '<div class="chiprow">';
+      DEFECT_TAGS.forEach(function (tag) {
+        html += '<button type="button" class="chip" data-area-tag="' + i + '" data-tag="' + esc(tag) + '">' + esc(tag) + '</button>';
+      });
+      html += '</div>';
+      if (area.score !== null && area.score <= 2 && state.cleaningStage !== "Before") {
+        var xtag = area.score === 1 ? "NO-GO" : "MAJOR EXCEPTION";
+        html += '<div class="exception-card" data-exception-card="' + i + '">';
+        html += '<div class="title">' + esc(area.name) + ' &mdash; scored ' + area.score + ' (' + xtag + ')</div>';
+        html += '<textarea rows="2" placeholder="Corrective action taken or needed" data-exception="' + i + '" style="font-family:inherit;font-size:13px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);">' + esc(area.exceptionAction) + '</textarea>';
+        html += '<div class="photo-block">';
+        if (area.exceptionPhotos.length) {
+          html += '<div class="photo-thumbs">';
+          area.exceptionPhotos.forEach(function (p, pi) {
+            html += '<div class="photo-thumb"><img src="' + esc(p.url) + '" alt=""><button type="button" class="rm" data-rmphoto="' + i + ':' + pi + '">&times;</button></div>';
+          });
+          html += '</div>';
+        } else {
+          html += '<div class="photo-required-note">Photo required &mdash; none attached yet</div>';
+        }
+        html += '<label class="photo-add-label">+ Take / add photo<input type="file" accept="image/*" capture="environment" multiple data-photo-input="' + i + '"></label>';
+        html += '<span class="photo-uploading" data-uploading-msg="' + i + '" style="display:none;">Uploading&hellip;</span>';
+        html += '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    var grade = computeGrade(state.areas);
+    html += '<div class="score-summary">';
+    html += '<div><div class="big mono">' + grade.pct.toFixed(0) + '%</div><div class="lbl">Starts at 100, deducts per defect</div></div>';
+    html += '<div>' + gradeHtml(grade.letter) + '<div class="lbl" style="margin-top:4px;">Running Grade</div></div>';
+    html += '<div><span class="pill ' + (totals.criticals.length ? "bad" : "good") + '">' + totals.criticals.length + ' at/below 2</span></div>';
+    html += '<div style="margin-left:auto;font-size:12px;color:var(--text-muted);">' + totals.scoredCount + ' of ' + AREAS.length + ' scored</div>';
+    html += '</div>';
+    if (errors.areas) html += '<div class="field err" style="margin-top:8px;"><span class="errtext">' + esc(errors.areas) + '</span></div>';
+    if (errors.exceptions) html += '<div class="field err" style="margin-top:8px;"><span class="errtext">' + esc(errors.exceptions) + '</span></div>';
+    if (errors.photos) html += '<div class="field err" style="margin-top:8px;"><span class="errtext">' + esc(errors.photos) + '</span></div>';
+    html += '</div>';
+
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Inspector Certification</h2>';
+    html += '<label class="cert-row"><input type="checkbox" id="f_certify" ' + (state.certify ? "checked" : "") + '><p>I certify that the inspection scores accurately reflect the cleanliness condition of the railcar and that all required photographs have been attached.</p></label>';
+    html += '<div class="grid2" style="margin-top:12px;">';
+    html += field("certName", "Inspector Signature (type name)", true, '<input type="text" id="f_certName" value="' + esc(state.certName) + '">');
+    html += field("certDate", "Certification Date", true, '<input type="date" id="f_certDate" value="' + esc(state.certDate) + '">');
+    html += '</div>';
+    html += '</div>';
+
+    document.getElementById("viewNew").innerHTML = html;
+    wireNewHandlers();
+  }
+
+  function field(key, label, required, inputHtml) {
+    var errCls = errors[key] ? " err" : "";
+    var out = '<div class="field' + errCls + '">';
+    out += '<label for="f_' + key + '">' + esc(label) + (required ? ' <span class="req">*</span>' : "") + '</label>';
+    out += inputHtml;
+    if (errors[key]) out += '<span class="errtext">' + esc(errors[key]) + '</span>';
+    out += '</div>';
+    return out;
+  }
+  function selectHtml(id, options, current, placeholder) {
+    var out = '<select id="' + id + '">';
+    if (placeholder) out += '<option value="">' + esc(placeholder) + '</option>';
+    options.forEach(function (o) {
+      out += '<option value="' + esc(o) + '"' + (o === current ? " selected" : "") + '>' + esc(o) + '</option>';
+    });
+    out += '</select>';
+    return out;
+  }
+  function openCorrectiveActions() {
+    return (caDocs || []).filter(function (c) { return c.status === "Open" || c.status === "In Progress"; });
+  }
+  function caSelectHtml(current) {
+    var opts = openCorrectiveActions();
+    var out = '<select id="f_reinspectsCaId">';
+    out += '<option value="">' + (opts.length ? "Select open corrective action" : "No open corrective actions") + '</option>';
+    opts.forEach(function (c) {
+      var label = "Car " + c.railcarNumber + " — " + c.area + " (" + c.district + ", due " + (c.dueDate || "no due date") + ")";
+      out += '<option value="' + esc(c._id) + '"' + (c._id === current ? " selected" : "") + '>' + esc(label) + '</option>';
+    });
+    out += '</select>';
+    return out;
+  }
+
+  // ---- Suggestion datalists: seeded from real known locations, then self-building from
+  // whatever inspectors and supervisors actually type into real submitted inspections. ----
+  function setDatalistOptions(id, values) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = values.map(function (v) { return '<option value="' + esc(v) + '">'; }).join("");
+  }
+  function refreshSuggestDatalists() {
+    var yards = {}, inspectors = {}, supervisors = {};
+    Object.keys(YARD_HINTS).forEach(function (d) { YARD_HINTS[d].forEach(function (y) { yards[y] = 1; }); });
+    logDocs.forEach(function (d) {
+      if (d.yard) yards[d.yard] = 1;
+      if (d.inspectorName) inspectors[d.inspectorName] = 1;
+      if (d.supervisor) supervisors[d.supervisor] = 1;
+    });
+    setDatalistOptions("dl_yard", Object.keys(yards).sort());
+    setDatalistOptions("dl_inspector", Object.keys(inspectors).sort());
+    setDatalistOptions("dl_supervisor", Object.keys(supervisors).sort());
+  }
+  function refreshCarDatalist(district) {
+    setDatalistOptions("dl_railcar", CAR_ROSTER[district] || []);
+  }
+
+  function wireNewHandlers() {
+    var ids = ["railcarNumber", "trainNumber", "date", "district", "yard", "shift", "inspectionType",
+      "inspectorName", "supervisor", "employeeId", "scheduledMin", "actualMin", "certName", "certDate", "reinspectsCaId", "jiraTicket"];
+    ids.forEach(function (id) {
+      var el = document.getElementById("f_" + id);
+      if (!el) return;
+      el.addEventListener("input", function () { state[id] = el.value; });
+      el.addEventListener("change", function () { state[id] = el.value; });
+    });
+    ["railcarNumber", "date"].forEach(function (id) {
+      var el = document.getElementById("f_" + id);
+      if (el) el.addEventListener("input", resetDupWarning);
+    });
+    var certify = document.getElementById("f_certify");
+    if (certify) certify.addEventListener("change", function () { state.certify = certify.checked; });
+
+    var inspectionTypeEl = document.getElementById("f_inspectionType");
+    if (inspectionTypeEl) inspectionTypeEl.addEventListener("change", function () {
+      state.inspectionType = inspectionTypeEl.value;
+      if (state.inspectionType !== "Follow-up") state.reinspectsCaId = "";
+      if (state.inspectionType !== "Complaint-Driven") state.jiraTicket = "";
+      renderNew();
+    });
+
+    var districtEl = document.getElementById("f_district");
+    if (districtEl) districtEl.addEventListener("change", function () { refreshCarDatalist(districtEl.value); });
+    refreshCarDatalist(state.district);
+
+    document.querySelectorAll("[data-stage]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.cleaningStage = el.getAttribute("data-stage");
+        delete errors.cleaningStage;
+        resetDupWarning();
+        renderNew();
+      });
+    });
+
+    document.querySelectorAll("[data-calib-toggle]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var box = document.querySelector('[data-calib-box="' + el.getAttribute("data-calib-toggle") + '"]');
+        if (box) box.classList.toggle("open");
+      });
+    });
+    document.querySelectorAll("[data-area-tag]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var i = parseInt(el.getAttribute("data-area-tag"), 10);
+        var tag = el.getAttribute("data-tag");
+        var current = state.areas[i].comments;
+        if (current.indexOf(tag) !== -1) return;
+        state.areas[i].comments = current ? (current + ", " + tag) : tag;
+        renderNew();
+      });
+    });
+
+    document.querySelectorAll("[data-checklist]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        state.checklist[parseInt(el.getAttribute("data-checklist"), 10)] = el.checked;
+        renderNew();
+      });
+    });
+    document.querySelectorAll("[data-area]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var i = parseInt(el.getAttribute("data-area"), 10);
+        var score = parseInt(el.getAttribute("data-score"), 10);
+        state.areas[i].score = (state.areas[i].score === score) ? null : score;
+        if (state.areas[i].score === null || state.areas[i].score > 2) state.areas[i].exceptionAction = "";
+        renderNew();
+        // Auto-advance: jump to the exception card if one just opened, otherwise to the
+        // next unscored area, so the inspector isn't hunting through 13 areas by hand.
+        requestAnimationFrame(function () {
+          var sc = state.areas[i].score;
+          if (sc !== null && sc <= 2) {
+            var card = document.querySelector('[data-exception-card="' + i + '"]');
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          var next = -1;
+          for (var k = i + 1; k < state.areas.length; k++) { if (state.areas[k].score === null) { next = k; break; } }
+          if (next === -1) { for (var k2 = 0; k2 < state.areas.length; k2++) { if (state.areas[k2].score === null) { next = k2; break; } } }
+          if (next !== -1) {
+            var row = document.querySelector('[data-area-row="' + next + '"]');
+            if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      });
+    });
+    document.querySelectorAll("[data-area-comment]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.areas[parseInt(el.getAttribute("data-area-comment"), 10)].comments = el.value;
+      });
+    });
+    document.querySelectorAll("[data-area-photo]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        state.areas[parseInt(el.getAttribute("data-area-photo"), 10)].photo = el.checked;
+      });
+    });
+    document.querySelectorAll("[data-exception]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.areas[parseInt(el.getAttribute("data-exception"), 10)].exceptionAction = el.value;
+      });
+    });
+    document.querySelectorAll("[data-photo-input]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        var i = parseInt(el.getAttribute("data-photo-input"), 10);
+        var files = Array.prototype.slice.call(el.files || []);
+        el.value = "";
+        if (files.length) uploadPhotos(i, files);
+      });
+    });
+    document.querySelectorAll("[data-rmphoto]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var parts = el.getAttribute("data-rmphoto").split(":");
+        var i = parseInt(parts[0], 10), pi = parseInt(parts[1], 10);
+        state.areas[i].exceptionPhotos.splice(pi, 1);
+        renderNew();
+      });
+    });
+  }
+
+  // Downscale a photo client-side before it goes over the wire. Yard and layover-point cell
+  // signal is often marginal, and a full-resolution phone photo is overkill for evidence review.
+  function compressImage(file, maxDim, quality) {
+    return new Promise(function (resolve) {
+      if (!file || !file.type || file.type.indexOf("image/") !== 0 || typeof document === "undefined") { resolve(file); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var w = img.width, h = img.height;
+        if (!w || !h || (w <= maxDim && h <= maxDim)) { resolve(file); return; }
+        var scale = Math.min(maxDim / w, maxDim / h);
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+          resolve(blob ? new File([blob], file.name || "photo.jpg", { type: "image/jpeg" }) : file);
+        }, "image/jpeg", quality || 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  function uploadPhotos(areaIndex, files) {
+    if (!assetsCap) {
+      setStatus("Photo storage isn't available in this view right now.", "err");
+      return;
+    }
+    var msgEl = document.querySelector('[data-uploading-msg="' + areaIndex + '"]');
+    if (msgEl) msgEl.style.display = "";
+    uploadingCount += files.length;
+    updateSubmitAvailability();
+    files.forEach(function (file) {
+      compressImage(file, 1600, 0.82).then(function (toUpload) {
+        return assetsCap.upload(toUpload);
+      }).then(function (res) {
+        state.areas[areaIndex].exceptionPhotos.push({ id: res.id, url: res.url });
+      }).catch(function () {
+        setStatus("A photo failed to upload. Try again.", "err");
+      }).then(function () {
+        uploadingCount = Math.max(0, uploadingCount - 1);
+        updateSubmitAvailability();
+        renderNew();
+      });
+    });
+  }
+
+  function updateSubmitAvailability() {
+    var btn = document.getElementById("submitBtn");
+    if (!btn) return;
+    btn.disabled = uploadingCount > 0;
+    if (uploadingCount > 0) setStatus("Uploading photo evidence…");
+  }
+
+  // ---- validation + submit ----
+  function validate() {
+    errors = {};
+    if (!state.railcarNumber.trim()) errors.railcarNumber = "Required";
+    if (!state.date) errors.date = "Required";
+    if (!state.district) errors.district = "Required";
+    if (!state.inspectorName.trim()) errors.inspectorName = "Required";
+    if (state.inspectionType === "Follow-up" && !state.reinspectsCaId) errors.reinspectsCaId = "Pick the corrective action being reinspected.";
+    var unscored = state.areas.filter(function (a) { return a.score === null; });
+    if (unscored.length) errors.areas = unscored.length + " area(s) still need a score.";
+    var baseline = state.cleaningStage === "Before";
+    if (baseline && state.inspectionType === "Follow-up") errors.cleaningStage = "A follow-up reinspection checks the crew's fix, so score it as After cleaning.";
+    var missingException = baseline ? [] : state.areas.filter(function (a) { return a.score !== null && a.score <= 2 && !a.exceptionAction.trim(); });
+    if (missingException.length) errors.exceptions = "Add a corrective action for every area scored 1 or 2.";
+    var missingPhoto = baseline ? [] : state.areas.filter(function (a) { return a.score !== null && a.score <= 2 && a.exceptionPhotos.length === 0; });
+    if (missingPhoto.length) errors.photos = "Attach at least one photo for every area scored 1 or 2 (required for NO-GOs and major exceptions).";
+    if (uploadingCount > 0) errors.photos = "Wait for photo uploads to finish before submitting.";
+    if (!state.certify) errors.certify = "Required";
+    if (!state.certName.trim()) errors.certName = "Required";
+    if (!state.certDate) errors.certDate = "Required";
+    return Object.keys(errors).length === 0;
+  }
+
+  function buildPayload() {
+    var totals = computeTotals(state.areas);
+    var grade = computeGrade(state.areas);
+    return {
+      railcarNumber: state.railcarNumber.trim(),
+      trainNumber: state.trainNumber.trim(),
+      date: state.date,
+      district: state.district,
+      yard: state.yard.trim(),
+      shift: state.shift,
+      inspectionType: state.inspectionType,
+      cleaningStage: state.cleaningStage === "Before" ? "Before" : "After",
+      inspectorName: state.inspectorName.trim(),
+      supervisor: state.supervisor.trim(),
+      employeeId: state.employeeId.trim(),
+      scheduledMin: state.scheduledMin ? Number(state.scheduledMin) : null,
+      actualMin: state.actualMin ? Number(state.actualMin) : null,
+      reinspectsCaId: state.reinspectsCaId || "",
+      jiraTicket: state.jiraTicket.trim(),
+      checklist: CHECKLIST.reduce(function (acc, label, i) { acc[label] = state.checklist[i]; return acc; }, {}),
+      areas: state.areas.map(function (a) {
+        return {
+          name: a.name, score: a.score, comments: a.comments.trim(), photo: a.photo,
+          exceptionAction: a.exceptionAction.trim(),
+          exceptionPhotos: a.exceptionPhotos.map(function (p) { return { id: p.id, url: p.url }; })
+        };
+      }),
+      totalScore: totals.total,
+      avgScore: totals.avg,
+      criticalCount: totals.criticals.length,
+      noGoCount: state.areas.filter(function (a) { return a.score === 1; }).length,
+      gradePct: grade.pct,
+      gradeLetter: grade.letter,
+      certifiedName: state.certName.trim(),
+      certifiedDate: state.certDate,
+      submittedAt: new Date().toISOString(),
+    };
+  }
+
+  // ---- Duplicate-inspection guard: catches the same car getting graded twice the same day
+  // by two different inspectors who don't know about each other -- a real risk once you've
+  // got 30+ people spread across five districts. Warns, doesn't block (a genuine second look
+  // is legitimate), and Follow-up inspections are exempt since re-checking the same car same
+  // day is the whole point of that inspection type. ----
+  function findDuplicateInspection() {
+    var car = state.railcarNumber.trim();
+    if (!car || !state.date) return null;
+    var stage = state.cleaningStage === "Before" ? "Before" : "After";
+    return logDocs.find(function (d) {
+      return (d.railcarNumber || "").trim() === car && d.date === state.date && (isBaseline(d) ? "Before" : "After") === stage;
+    }) || null;
+  }
+  function resetDupWarning() {
+    if (!dupWarningShown) return;
+    dupWarningShown = false;
+    var btn = document.getElementById("submitBtn");
+    if (btn) btn.textContent = "Transmit Inspection";
+    setStatus("Fill in the form, then submit.");
+  }
+
+  function submit() {
+    if (!validate()) {
+      renderNew();
+      setStatus("Fix the highlighted fields before submitting.", "err");
+      var firstErr = document.querySelector(".field.err, .exception-card");
+      if (firstErr) firstErr.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!db) {
+      setStatus("Live storage isn't available in this view right now.", "err");
+      return;
+    }
+    var btn = document.getElementById("submitBtn");
+    if (state.inspectionType !== "Follow-up" && !dupWarningShown) {
+      var dup = findDuplicateInspection();
+      if (dup) {
+        dupWarningShown = true;
+        btn.textContent = "Confirm & Transmit Anyway";
+        setStatus("Car " + state.railcarNumber.trim() + " already has a " + (state.cleaningStage === "Before" ? "before-cleaning" : "after-cleaning") + " inspection today by " + (dup.inspectorName || "another inspector") + ". Click Transmit again to submit anyway.", "err");
+        return;
+      }
+    }
+    btn.disabled = true;
+    setStatus("Transmitting...");
+    var submittedState = state;
+    db.collection("inspections").add(buildPayload()).then(function (docRef) {
+      return Promise.all([
+        createCorrectiveActions(docRef.id, submittedState),
+        linkReinspection(docRef.id, submittedState)
+      ]);
+    }).then(function () {
+      setSource("db", "ok");
+      setStatus("Inspection transmitted.", "ok");
+      storage.checkedAt = 0;
+      saveLastUsed(submittedState);
+      dupWarningShown = false;
+      btn.textContent = "Transmit Inspection";
+      state = freshState();
+      renderNew();
+      btn.disabled = false;
+    }).catch(function (e) {
+      setSource("db", "warn");
+      if (e && e.code === "quota_exceeded") {
+        setStatus("Database full (5,000 records). Export to SharePoint and roll up older months before logging more.", "err");
+      } else {
+        setStatus("Transmission failed: " + (e && e.message ? e.message : "unknown error"), "err");
+      }
+      btn.disabled = false;
+    });
+  }
+
+  // ---- Corrective-action creation + reinspection linkage ----
+  // Every area scored 1 or 2 opens its own trackable corrective action, instead of living only
+  // as a text field on the inspection -- that's what makes reinspection pass rate and
+  // repeat-defect rate computable from real data instead of by hand.
+  function createCorrectiveActions(inspectionId, s) {
+    if (!db) return Promise.resolve();
+    if (s.cleaningStage === "Before") return Promise.resolve();
+    var criticalAreas = s.areas.filter(function (a) { return a.score !== null && a.score <= 2; });
+    if (!criticalAreas.length) return Promise.resolve();
+    return Promise.all(criticalAreas.map(function (a) {
+      return db.collection("correctiveActions").add({
+        sourceInspectionId: inspectionId,
+        railcarNumber: s.railcarNumber.trim(),
+        district: s.district,
+        area: a.name,
+        severity: a.score === 1 ? "NO-GO" : "Major Exception",
+        defectDescription: a.comments.trim(),
+        probableCause: "",
+        confirmedRootCause: "",
+        owner: "",
+        assignedDate: todayStr(),
+        dueDate: "",
+        status: "Open",
+        completionDate: "",
+        correctiveActionText: a.exceptionAction.trim(),
+        reinspectionId: "",
+        reinspectionResult: "",
+        effectivenessVerified: false,
+        verifiedDate: "",
+        notes: "",
+        createdAt: new Date().toISOString()
+      });
+    }));
+  }
+  // A "Follow-up" inspection that names which corrective action it's reinspecting writes the
+  // result back onto that CA: same area still scoring <=2 is a Repeat Defect and reopens it,
+  // anything else is a Pass and closes it out (pending manual effectiveness verification).
+  function linkReinspection(inspectionId, s) {
+    if (!db || s.inspectionType !== "Follow-up" || !s.reinspectsCaId || s.cleaningStage === "Before") return Promise.resolve();
+    var ca = (caDocs || []).find(function (c) { return c._id === s.reinspectsCaId; });
+    if (!ca) return Promise.resolve();
+    var matchArea = s.areas.find(function (a) { return a.name === ca.area; });
+    var repeatDefect = !!(matchArea && matchArea.score !== null && matchArea.score <= 2);
+    var result = repeatDefect ? "Repeat Defect" : "Pass";
+    return db.collection("correctiveActions").doc(s.reinspectsCaId).update({
+      reinspectionId: inspectionId,
+      reinspectionResult: result,
+      status: repeatDefect ? "Open" : "Completed",
+      completionDate: repeatDefect ? (ca.completionDate || "") : todayStr(),
+      notes: (ca.notes ? ca.notes + " | " : "") + "Reinspected " + todayStr() + ": " + result
+    });
+  }
+  function updateCA(id, patch) {
+    if (!db) return;
+    db.collection("correctiveActions").doc(id).update(patch).catch(function () {
+      setStatus("Couldn't update corrective action.", "err");
+    });
+  }
+
+  // ---- Log tab ----
+  function subscribeLog() {
+    if (!db || logUnsub) return;
+    logUnsub = db.collection("inspections").orderBy("submittedAt", "desc").limit(1000).onSnapshot(function (snap) {
+      setSource("log", "ok");
+      logDocs = snap.docs.map(function (d) { return Object.assign({ _id: d.id }, d.data()); });
+      refreshSuggestDatalists();
+      if (currentTab === "log") renderLog();
+      if (currentTab === "dash") renderDash();
+      pushFullData();
+    }, function () {
+      setSource("log", "bad");
+      setStatus("Couldn't load the log.", "err");
+    });
+  }
+
+  function subscribeCA() {
+    if (!db || caUnsub) return;
+    caUnsub = db.collection("correctiveActions").orderBy("assignedDate", "desc").limit(1000).onSnapshot(function (snap) {
+      setSource("ca", "ok");
+      caDocs = snap.docs.map(function (d) { return Object.assign({ _id: d.id }, d.data()); });
+      if (currentTab === "ca") renderCA();
+      if (currentTab === "dash") renderDash();
+      if (currentTab === "new") renderNew();
+      pushFullData();
+    }, function () {
+      setSource("ca", "bad");
+      setStatus("Couldn't load corrective actions.", "err");
+    });
+  }
+
+  // ---- Monthly grading targets: how many cars each district is supposed to get graded
+  // per month. Editable config, not derived from inspections, so it lives in its own doc. ----
+  function subscribeTargets() {
+    if (!db || targetsUnsub) return;
+    targetsUnsub = db.collection("config").doc("monthlyTargets").onSnapshot(function (doc) {
+      setSource("targets", "ok");
+      monthlyTargets = (doc && doc.exists && doc.data()) ? doc.data() : {};
+      if (currentTab === "dash") renderDash();
+    }, function () { setSource("targets", "bad"); });
+  }
+  function saveMonthlyTarget(district, value) {
+    if (!db) return;
+    var n = parseInt(value, 10);
+    var patch = {};
+    patch[district] = isFinite(n) && n >= 0 ? n : 0;
+    db.collection("config").doc("monthlyTargets").set(patch, { merge: true }).catch(function () {});
+  }
+
+  // ---- Corrective Actions tab ----
+  function renderCA() {
+    var html = "";
+    var today = todayStr();
+    var openCount = 0, overdueCount = 0;
+    caDocs.forEach(function (c) {
+      if (c.status !== "Completed" && c.status !== "Verified") {
+        openCount++;
+        if (c.dueDate && c.dueDate < today) overdueCount++;
+      }
+    });
+    var reinspected = caDocs.filter(function (c) { return c.reinspectionResult; });
+    var passedCA = reinspected.filter(function (c) { return c.reinspectionResult === "Pass"; }).length;
+
+    html += '<div class="card"><div class="kpi-grid">';
+    html += kpiTile(openCount, "Open Corrective Actions");
+    html += kpiTile(overdueCount, "Overdue");
+    html += kpiTile(reinspected.length ? (passedCA / reinspected.length * 100).toFixed(0) + "%" : "-", "Reinspection Pass Rate");
+    html += kpiTile(reinspected.length - passedCA, "Repeat Defects");
+    html += '</div></div>';
+
+    if (!caDocs.length) {
+      html += '<div class="card"><div class="empty">No corrective actions yet. One opens automatically for every area an inspection scores 1 or 2.</div></div>';
+      document.getElementById("viewCA").innerHTML = html;
+      return;
+    }
+
+    html += '<div class="card">';
+    caDocs.forEach(function (c, idx) {
+      var isOverdue = !!(c.dueDate && c.dueDate < today && c.status !== "Completed" && c.status !== "Verified");
+      var pillCls = (c.status === "Verified" || c.status === "Completed") ? "good" : (isOverdue ? "bad" : "warn");
+      html += '<div class="logitem" style="cursor:default;">';
+      html += '<div class="logitem-top">';
+      html += '<div><div class="logitem-title">Car ' + esc(c.railcarNumber) + ' &middot; ' + esc(c.area) + '</div>';
+      html += '<div class="logitem-sub">' + esc(c.district) + ' &middot; ' + esc(c.severity) + ' &middot; opened ' + esc(c.assignedDate) + '</div></div>';
+      html += '<span class="pill ' + pillCls + '">' + (isOverdue ? "Overdue" : esc(c.status)) + '</span>';
+      html += '</div>';
+      html += '<div style="margin-top:10px;font-size:12.5px;color:var(--text-muted);">' + esc(c.correctiveActionText || "No corrective action text recorded.") + '</div>';
+      var caLocked = (c.status === "Completed" || c.status === "Verified");
+      html += '<div class="grid3" style="margin-top:10px;">';
+      if (caLocked) {
+        html += '<div class="field"><label>Owner</label><div style="padding:9px 10px;font-size:14px;color:var(--text-muted);">' + esc(c.owner || "-") + '</div></div>';
+        html += '<div class="field"><label>Due Date</label><div style="padding:9px 10px;font-size:14px;color:var(--text-muted);">' + esc(c.dueDate || "-") + '</div></div>';
+        html += '<div class="field"><label>Status</label><div style="padding:9px 10px;font-size:14px;">' + esc(c.status) + '</div></div>';
+      } else {
+        html += '<div class="field"><label>Owner</label><input type="text" data-ca-owner="' + idx + '" value="' + esc(c.owner || "") + '"></div>';
+        html += '<div class="field"><label>Due Date</label><input type="date" data-ca-due="' + idx + '" value="' + esc(c.dueDate || "") + '"></div>';
+        html += '<div class="field"><label>Status</label><select data-ca-status="' + idx + '">' + CA_STATUSES.map(function (st) {
+          return '<option value="' + st + '"' + (st === c.status ? " selected" : "") + '>' + st + '</option>';
+        }).join("") + '</select></div>';
+      }
+      html += '</div>';
+      if (caLocked) {
+        html += '<p class="hint" style="margin:6px 0 0;">Closed record &mdash; owner, due date and status are locked. Reopen it if something needs to change.</p>';
+        html += '<button type="button" class="btn-secondary" style="margin-top:6px;" data-ca-reopen="' + idx + '">Reopen Record</button>';
+      }
+      if (c.reinspectionId) {
+        html += '<div class="detail-row"><span>Reinspection Result</span><span class="mono">' + esc(c.reinspectionResult || "-") + '</span></div>';
+      }
+      if (c.status === "Completed" && !c.effectivenessVerified) {
+        html += '<label class="cert-row" style="margin-top:8px;"><input type="checkbox" data-ca-verify="' + idx + '"><p style="font-size:12.5px;">Confirm effectiveness verified &mdash; no repeat defect observed since closure</p></label>';
+      }
+      if (c.effectivenessVerified) {
+        html += '<div class="detail-row"><span>Effectiveness Verified</span><span class="mono">Yes' + (c.verifiedDate ? " on " + esc(c.verifiedDate) : "") + '</span></div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+
+    document.getElementById("viewCA").innerHTML = html;
+    wireCAHandlers();
+  }
+  function wireCAHandlers() {
+    document.querySelectorAll("[data-ca-owner]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        updateCA(caDocs[parseInt(el.getAttribute("data-ca-owner"), 10)]._id, { owner: el.value });
+      });
+    });
+    document.querySelectorAll("[data-ca-due]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        updateCA(caDocs[parseInt(el.getAttribute("data-ca-due"), 10)]._id, { dueDate: el.value });
+      });
+    });
+    document.querySelectorAll("[data-ca-status]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        var patch = { status: el.value };
+        if (el.value === "Completed") patch.completionDate = todayStr();
+        updateCA(caDocs[parseInt(el.getAttribute("data-ca-status"), 10)]._id, patch);
+      });
+    });
+    document.querySelectorAll("[data-ca-verify]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        if (!el.checked) return;
+        updateCA(caDocs[parseInt(el.getAttribute("data-ca-verify"), 10)]._id, {
+          effectivenessVerified: true, verifiedDate: todayStr(), status: "Verified"
+        });
+      });
+    });
+    document.querySelectorAll("[data-ca-reopen]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        updateCA(caDocs[parseInt(el.getAttribute("data-ca-reopen"), 10)]._id, {
+          status: "In Progress", completionDate: "", effectivenessVerified: false, verifiedDate: ""
+        });
+      });
+    });
+  }
+
+  // ---- Sample layout preview (rendering-only; never written to the database) ----
+  var showingSample = false;
+  var SAMPLE_DOCS_BASE = [
+    { railcarNumber: "7714", district: "MDN", avgScore: 4.7, gradePct: 96, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "7802", district: "MDN", avgScore: 4.5, gradePct: 94, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "7910", district: "MDN", avgScore: 4.6, gradePct: 95, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "6603", district: "MDW", avgScore: 4.4, gradePct: 92, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "6711", district: "MDW", avgScore: 4.8, gradePct: 97, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "6588", district: "MDW", avgScore: 4.6, gradePct: 95, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "8021", district: "UP-N", avgScore: 4.2, gradePct: 88, noGoCount: 0, criticalCount: 0, areas: [{ name: "Lower Level Floors", score: 3, comments: "Trash/Debris near door" }] },
+    { railcarNumber: "8114", district: "UP-N", avgScore: 4.0, gradePct: 84, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "8206", district: "UP-N", avgScore: 4.3, gradePct: 90, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "7345", district: "UP-NW", avgScore: 4.1, gradePct: 86, noGoCount: 0, criticalCount: 0, areas: [{ name: "Vestibule", score: 4, comments: "Minor Stains on floor" }] },
+    { railcarNumber: "7290", district: "UP-NW", avgScore: 4.4, gradePct: 91, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "7188", district: "UP-NW", avgScore: 2.9, gradePct: 61, noGoCount: 1, criticalCount: 1, areas: [{ name: "Restroom", score: 1, comments: "Biohazard, Odor", exceptionAction: "Sample: restroom unusable, pulled from service and cleaned before next run.", exceptionPhotos: [{ sample: true }] }] },
+    { railcarNumber: "7401", district: "UP-W", avgScore: 4.3, gradePct: 89, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "7512", district: "UP-W", avgScore: 4.2, gradePct: 87, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "5510", district: "RI", avgScore: 4.5, gradePct: 93, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "5622", district: "RI", avgScore: 4.4, gradePct: 91, noGoCount: 0, criticalCount: 0, areas: [{ name: "Upper Level Seats", score: 3, comments: "Odor near seat 12" }] },
+    { railcarNumber: "5588", district: "RI", avgScore: 4.6, gradePct: 94, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "5701", district: "RI", avgScore: 4.3, gradePct: 90, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9012", district: "MED", avgScore: 4.4, gradePct: 91, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9104", district: "MED", avgScore: 4.1, gradePct: 85, noGoCount: 0, criticalCount: 1, areas: [{ name: "Upper Level Windows", score: 2, comments: "Smudged Glass", exceptionAction: "Sample: head and fingerprint smudges on glass, re-cleaned same shift.", exceptionPhotos: [{ sample: true }] }] },
+    { railcarNumber: "9207", district: "MED", avgScore: 4.5, gradePct: 93, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9310", district: "MED", avgScore: 4.3, gradePct: 89, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9418", district: "MED", avgScore: 4.2, gradePct: 87, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9522", district: "MED", avgScore: 4.4, gradePct: 90, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "9630", district: "MED", avgScore: 4.0, gradePct: 83, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "3312", district: "SWS", avgScore: 3.6, gradePct: 76, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "3405", district: "SWS", avgScore: 3.4, gradePct: 73, noGoCount: 0, criticalCount: 1, areas: [{ name: "Side Loading Doors", score: 2, comments: "Graffiti on door panel", exceptionAction: "Sample: cleaned graffiti same shift.", exceptionPhotos: [{ sample: true }] }] },
+    { railcarNumber: "3518", district: "SWS", avgScore: 3.7, gradePct: 78, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "3620", district: "SWS", avgScore: 3.5, gradePct: 75, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "3711", district: "SWS", avgScore: 3.6, gradePct: 77, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "728", district: "BNSF", avgScore: 4.5, gradePct: 93, noGoCount: 0, criticalCount: 0, areas: [] },
+    { railcarNumber: "745", district: "BNSF", avgScore: 4.3, gradePct: 89, noGoCount: 0, criticalCount: 0, areas: [{ name: "Lower Level Windows", score: 3, comments: "Smudged Glass on lower windows" }] },
+    { railcarNumber: "802", district: "BNSF", avgScore: 4.6, gradePct: 95, noGoCount: 0, criticalCount: 0, areas: [] },
+  ];
+  // Sample rows are demo-only (never stored, never mixed with real data), so shift/date/time
+  // are attached deterministically here rather than hand-typed thirty times over.
+  var SAMPLE_DOCS = SAMPLE_DOCS_BASE.map(function (d, i) {
+    var now = new Date();
+    var day = String((i % 27) + 1).padStart(2, "0");
+    var mm = String(now.getMonth() + 1).padStart(2, "0");
+    var schedOptions = [20, 25, 30, 35, 40];
+    var sched = schedOptions[i % schedOptions.length];
+    var variance = (i % 5 === 0) ? 8 : (i % 3 === 0 ? -3 : 2);
+    return Object.assign({}, d, {
+      date: now.getFullYear() + "-" + mm + "-" + day,
+      shift: i % 2 === 0 ? "AM" : "PM",
+      scheduledMin: sched,
+      actualMin: sched + variance
+    });
+  });
+
+  // ---- Cleaning effectiveness: arrival baseline vs after-cleaning result. The matched-car lift
+  // (same car, same day, scored both ways) is the fair number; the overall averages can differ
+  // just because different cars were sampled. ----
+  function effectivenessHtml(allDocs) {
+    var before = allDocs.filter(isBaseline);
+    var after = graded(allDocs);
+    var avg = function (arr) { return arr.length ? arr.reduce(function (s, d) { return s + (d.gradePct || 0); }, 0) / arr.length : null; };
+    var afterByKey = {};
+    after.forEach(function (d) { afterByKey[(d.railcarNumber || "") + "|" + d.date] = d; });
+    var pairs = [];
+    before.forEach(function (b) {
+      var a = afterByKey[(b.railcarNumber || "") + "|" + b.date];
+      if (a) pairs.push({ district: b.district || "Unassigned", lift: (a.gradePct || 0) - (b.gradePct || 0) });
+    });
+    var avgB = avg(before), avgA = avg(after);
+    var lift = pairs.length ? pairs.reduce(function (s, p) { return s + p.lift; }, 0) / pairs.length : null;
+    var out = '<div class="card">';
+    out += '<h2><span class="bar" style="background:#4DA3FF;"></span>Cleaning Effectiveness (Before vs. After)</h2>';
+    if (!before.length) {
+      out += '<p class="hint" style="margin:0;">No arrival baselines yet. Score a car as <strong>Before cleaning</strong> when it arrives, then score the same car <strong>After cleaning</strong> before it departs, and the lift the crew delivered shows up here.</p>';
+      return out + '</div>';
+    }
+    out += '<p class="hint">Lift is measured only on cars scored both ways on the same day, so the comparison is fair. ' + pairs.length + ' matched car' + (pairs.length === 1 ? "" : "s") + ' so far.</p>';
+    out += '<div class="kpi-grid">';
+    out += kpiTile(avgB === null ? "-" : avgB.toFixed(1) + "%", "Arrival Baseline Avg (" + before.length + ")");
+    out += kpiTile(avgA === null ? "-" : avgA.toFixed(1) + "%", "After Cleaning Avg (" + after.length + ")");
+    out += kpiTile(lift === null ? "-" : (lift >= 0 ? "+" : "") + lift.toFixed(1) + " pts", "Avg Lift, Matched Cars");
+    out += kpiTile(pairs.length, "Matched Cars");
+    out += '</div>';
+    if (pairs.length) {
+      var byD = {};
+      pairs.forEach(function (p) { if (!byD[p.district]) byD[p.district] = []; byD[p.district].push(p.lift); });
+      out += '<div style="overflow-x:auto;margin-top:12px;"><table class="disttable"><thead><tr><th>District</th><th class="num">Matched Cars</th><th class="num">Avg Lift</th></tr></thead><tbody>';
+      Object.keys(byD).sort().forEach(function (k) {
+        var l = byD[k].reduce(function (s, x) { return s + x; }, 0) / byD[k].length;
+        out += '<tr><td>' + esc(k) + '</td><td class="num">' + byD[k].length + '</td><td class="num">' + (l >= 0 ? "+" : "") + l.toFixed(1) + ' pts</td></tr>';
+      });
+      out += '</tbody></table></div>';
+    }
+    return out + '</div>';
+  }
+
+  function monthlyTargetsHtml(source) {
+    var thisMonth = todayStr().slice(0, 7);
+    var actualThisMonth = {};
+    (source || []).forEach(function (d) {
+      if ((d.date || "").slice(0, 7) === thisMonth) {
+        var k = d.district || "Unassigned";
+        actualThisMonth[k] = (actualThisMonth[k] || 0) + 1;
+      }
+    });
+    var out = '<div class="card">';
+    out += '<h2><span class="bar"></span>Monthly Grading Targets</h2>';
+    out += '<p class="hint">How many cars each district is supposed to get graded this month, vs. how many actually have been so far. Set the target once per district; it carries over month to month until you change it.</p>';
+    out += '<div style="overflow-x:auto;"><table class="disttable"><thead><tr><th>District</th><th class="num">Target / Month</th><th class="num">Graded This Month</th><th class="num">Progress</th></tr></thead><tbody>';
+    DISTRICTS.forEach(function (d) {
+      var target = monthlyTargets[d] || 0;
+      var actual = actualThisMonth[d] || 0;
+      var pct = target > 0 ? Math.min(100, Math.round(actual / target * 100)) : null;
+      var pillCls = pct === null ? "warn" : (pct >= 100 ? "good" : (pct >= 60 ? "warn" : "bad"));
+      out += '<tr><td>' + esc(d) + '</td><td class="num"><input type="number" min="0" style="width:64px;text-align:right;font-family:\'IBM Plex Mono\',monospace;background:var(--mono-bg);color:var(--text);border:1px solid var(--border);border-radius:2px;padding:5px 7px;min-height:36px;" data-target-district="' + esc(d) + '" value="' + target + '"></td>';
+      out += '<td class="num">' + actual + '</td>';
+      out += '<td class="num">' + (pct === null ? '<span class="pill warn">no target set</span>' : '<span class="pill ' + pillCls + '">' + pct + '%</span>') + '</td></tr>';
+    });
+    out += '</tbody></table></div>';
+    out += '</div>';
+    return out;
+  }
+
+  // ---- Dashboard tab (real submissions only, no seeded/fake data, unless previewing samples) ----
+  function renderDash() {
+    var html = "";
+    var allDocs = showingSample ? SAMPLE_DOCS : logDocs;
+    var source = graded(allDocs);
+
+    html += '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">';
+    html += '<div style="font-size:12.5px;color:var(--text-muted);max-width:480px;">' + (showingSample
+      ? '<strong style="color:var(--warn);">SAMPLE LAYOUT PREVIEW</strong> &mdash; the numbers below are made-up, shown only so you can see how this page looks once real inspections come in. Nothing here is stored.'
+      : 'This dashboard is built entirely from real submitted inspections. It has no seed data.') + '</div>';
+    html += '<button class="btn-secondary" id="toggleSampleBtn">' + (showingSample ? "Exit sample preview" : "Preview with sample layout") + '</button>';
+    html += '</div>';
+
+    if (!source.length) {
+      html += '<div class="card"><div class="empty">' + (allDocs.length
+        ? 'Only arrival baselines logged so far. Grades start once the first after-cleaning inspection comes in.'
+        : 'No real inspections logged yet. This dashboard has no seed data &mdash; every number here comes straight from submitted forms, so it stays empty until the first one comes in.') + '</div></div>';
+      if (!showingSample && allDocs.length) html += effectivenessHtml(allDocs);
+      if (!showingSample) html += monthlyTargetsHtml(source);
+      document.getElementById("viewDash").innerHTML = html;
+      wireDashHandlers();
+      return;
+    }
+
+    var totalInsp = source.length;
+    var avgAll = source.reduce(function (s, d) { return s + (d.avgScore || 0); }, 0) / totalInsp;
+    var passCount = source.filter(function (d) { return (d.criticalCount || 0) === 0; }).length;
+    var passRate = (passCount / totalInsp) * 100;
+    var totalCritical = source.reduce(function (s, d) { return s + (d.criticalCount || 0); }, 0);
+    var totalNoGo = source.reduce(function (s, d) { return s + (d.noGoCount || 0); }, 0);
+    var avgGradePct = source.reduce(function (s, d) { return s + (d.gradePct !== undefined ? d.gradePct : 100); }, 0) / totalInsp;
+    var systemLetter = capForCritical(letterForPct(avgGradePct), totalNoGo > 0);
+
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Systemwide Grade' + (showingSample ? " (sample)" : " &mdash; Real Submissions Only") + '</h2>';
+    html += '<div class="grade-hero">';
+    html += '<div class="grade-badge grade-' + baseLetter(systemLetter).toLowerCase() + '">' + systemLetter + '</div>';
+    html += '<div><div class="grade-hero-pct">' + avgGradePct.toFixed(1) + '%</div>';
+    html += '<div class="grade-hero-lbl">' + totalInsp + ' real inspection' + (totalInsp === 1 ? "" : "s") + (totalNoGo ? ' &middot; ' + totalNoGo + ' NO-GO' + (totalNoGo > 1 ? "s" : "") + ' logged' : ' &middot; no NO-GOs logged') + '</div>';
+    html += '<div class="grade-hero-sub">Every car starts at 100 (A). Points come off for each defect found; any area scored 1 or 2 caps that inspection at a C, so one bad restroom can\'t be averaged away by ten good ones.</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Systemwide KPIs</h2>';
+    html += '<div class="kpi-grid">';
+    html += kpiTile(totalInsp, "Inspections Logged");
+    html += kpiTile(avgGradePct.toFixed(1) + "%", "Avg Grade Score");
+    html += kpiTile(passRate.toFixed(0) + "%", "Pass Rate (0 critical)");
+    html += kpiTile(totalNoGo, "NO-GO Areas (score 1)");
+    html += '</div>';
+    html += '<p class="hint" style="margin:10px 0 0;">Grades use after-cleaning inspections only. Arrival baselines are shown separately below.</p>';
+    html += '</div>';
+
+    if (!showingSample) html += effectivenessHtml(allDocs);
+
+    if (!showingSample) {
+      var todayD = todayStr();
+      var caOpenD = caDocs.filter(function (c) { return c.status !== "Completed" && c.status !== "Verified"; }).length;
+      var caOverdueD = caDocs.filter(function (c) { return c.dueDate && c.dueDate < todayD && c.status !== "Completed" && c.status !== "Verified"; }).length;
+      var reinspectedD = caDocs.filter(function (c) { return c.reinspectionResult; });
+      var passedD = reinspectedD.filter(function (c) { return c.reinspectionResult === "Pass"; }).length;
+      var closedD = caDocs.filter(function (c) { return c.completionDate; });
+      var avgDaysD = closedD.length ? (closedD.reduce(function (s, c) {
+        var d1 = new Date(c.assignedDate), d2 = new Date(c.completionDate);
+        var diff = Math.round((d2 - d1) / 86400000);
+        return s + (isFinite(diff) ? Math.max(0, diff) : 0);
+      }, 0) / closedD.length) : null;
+      html += '<div class="card">';
+      html += '<h2><span class="bar"></span>Corrective Actions</h2>';
+      html += '<div class="kpi-grid">';
+      html += kpiTile(caOpenD, "Open Corrective Actions");
+      html += kpiTile(caOverdueD, "Overdue");
+      html += kpiTile(reinspectedD.length ? (passedD / reinspectedD.length * 100).toFixed(0) + "%" : "-", "Reinspection Pass Rate");
+      html += kpiTile(avgDaysD === null ? "-" : avgDaysD.toFixed(1), "Avg Days to Closure");
+      html += '</div></div>';
+    }
+
+    // by district
+    var MIN_SAMPLE = 5;
+    var byDist = {};
+    source.forEach(function (d) {
+      var k = d.district || "Unassigned";
+      if (!byDist[k]) byDist[k] = { count: 0, scoreSum: 0, gradeSum: 0, critical: 0, nogo: 0 };
+      byDist[k].count++;
+      byDist[k].scoreSum += (d.avgScore || 0);
+      byDist[k].gradeSum += (d.gradePct !== undefined ? d.gradePct : 100);
+      byDist[k].critical += (d.criticalCount || 0);
+      byDist[k].nogo += (d.noGoCount || 0);
+    });
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>By District</h2>';
+    html += '<p class="hint">Grades below ' + MIN_SAMPLE + ' inspections are marked insufficient data &mdash; too small a sample to post a letter grade against a district.</p>';
+    html += '<div style="overflow-x:auto;"><table class="disttable"><thead><tr><th>District</th><th class="num">Inspections</th><th class="num">Grade</th><th class="num">Avg %</th><th class="num">Critical Areas</th><th class="num">NO-GOs</th></tr></thead><tbody>';
+    Object.keys(byDist).sort().forEach(function (k) {
+      var row = byDist[k];
+      var pct = row.gradeSum / row.count;
+      var letter = capForCritical(letterForPct(pct), row.nogo > 0);
+      var gradeCell = row.count >= MIN_SAMPLE ? gradeHtml(letter) : '<span class="pill warn">insufficient data</span>';
+      html += '<tr><td>' + esc(k) + '</td><td class="num">' + row.count + '</td><td class="num">' + gradeCell + '</td><td class="num">' + pct.toFixed(1) + '%</td><td class="num">' + row.critical + '</td><td class="num">' + row.nogo + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '</div>';
+
+    // monthly grading targets -- how many cars each district is supposed to get graded this
+    // month, vs how many actually got graded. Targets are a manual config, not derived data.
+    if (!showingSample) html += monthlyTargetsHtml(source);
+
+    // by shift
+    var byShift = {};
+    source.forEach(function (d) {
+      var k = d.shift || "Unassigned";
+      if (!byShift[k]) byShift[k] = { count: 0, gradeSum: 0, critical: 0, nogo: 0 };
+      byShift[k].count++;
+      byShift[k].gradeSum += (d.gradePct !== undefined ? d.gradePct : 100);
+      byShift[k].critical += (d.criticalCount || 0);
+      byShift[k].nogo += (d.noGoCount || 0);
+    });
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>By Shift</h2>';
+    html += '<p class="hint">Same grading model, cut by AM/PM instead of district &mdash; this is what tells you if one shift is consistently behind the other, not just one yard.</p>';
+    html += '<div style="overflow-x:auto;"><table class="disttable"><thead><tr><th>Shift</th><th class="num">Inspections</th><th class="num">Grade</th><th class="num">Avg %</th><th class="num">Critical Areas</th><th class="num">NO-GOs</th></tr></thead><tbody>';
+    Object.keys(byShift).sort().forEach(function (k) {
+      var row = byShift[k];
+      var pct = row.gradeSum / row.count;
+      var letter = capForCritical(letterForPct(pct), row.nogo > 0);
+      var gradeCell = row.count >= MIN_SAMPLE ? gradeHtml(letter) : '<span class="pill warn">insufficient data</span>';
+      html += '<tr><td>' + esc(k) + '</td><td class="num">' + row.count + '</td><td class="num">' + gradeCell + '</td><td class="num">' + pct.toFixed(1) + '%</td><td class="num">' + row.critical + '</td><td class="num">' + row.nogo + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '</div>';
+
+    // cleaning time: planned vs actual, using the scheduled/actual minutes already captured
+    // on every form -- no new data collection required.
+    var timed = source.filter(function (d) { return d.scheduledMin != null && d.actualMin != null; });
+    if (timed.length) {
+      var avgSched = timed.reduce(function (s, d) { return s + d.scheduledMin; }, 0) / timed.length;
+      var avgActual = timed.reduce(function (s, d) { return s + d.actualMin; }, 0) / timed.length;
+      var overBudget = timed.filter(function (d) { return d.actualMin > d.scheduledMin; }).length;
+      html += '<div class="card">';
+      html += '<h2><span class="bar"></span>Cleaning Time (Planned vs. Actual)</h2>';
+      html += '<p class="hint">Only counts inspections where both a scheduled and an actual time were logged (' + timed.length + ' of ' + totalInsp + ').</p>';
+      html += '<div class="kpi-grid">';
+      html += kpiTile(avgSched.toFixed(0) + " min", "Avg Scheduled Time");
+      html += kpiTile(avgActual.toFixed(0) + " min", "Avg Actual Time");
+      html += kpiTile((avgActual - avgSched >= 0 ? "+" : "") + (avgActual - avgSched).toFixed(0) + " min", "Avg Variance");
+      html += kpiTile((overBudget / timed.length * 100).toFixed(0) + "%", "Ran Over Scheduled Time");
+      html += '</div></div>';
+    }
+
+    // defect pareto: roll up the defect tags inspectors tap into each area's comments, so
+    // "what's actually breaking" is visible without reading every comment by hand.
+    var tagCounts = {};
+    DEFECT_TAGS.forEach(function (t) { tagCounts[t] = 0; });
+    source.forEach(function (d) {
+      (d.areas || []).forEach(function (a) {
+        if (a.score === null) return;
+        DEFECT_TAGS.forEach(function (t) {
+          // "Streaked Glass" was the earlier name for this tag; older records count toward Smudged Glass.
+          var c = a.comments || "";
+          if (c.indexOf(t) !== -1 || (t === "Smudged Glass" && c.indexOf("Streaked Glass") !== -1)) tagCounts[t]++;
+        });
+      });
+    });
+    var tagTotal = Object.keys(tagCounts).reduce(function (s, k) { return s + tagCounts[k]; }, 0);
+    html += '<div class="card">';
+    html += '<h2><span class="bar"></span>Defect Pareto</h2>';
+    if (!tagTotal) {
+      html += '<div class="empty">No tagged defects yet. Defect tags get counted here once inspectors start using the quick-tag chips under each area.</div>';
+    } else {
+      html += '<p class="hint">Counted from the defect tag chips inspectors use, across ' + totalInsp + ' inspection' + (totalInsp === 1 ? "" : "s") + '. Ranked highest to lowest so the top few causes are obvious first.</p>';
+      var sortedTags = Object.keys(tagCounts).filter(function (t) { return tagCounts[t] > 0; }).sort(function (a, b) { return tagCounts[b] - tagCounts[a]; });
+      var maxTag = tagCounts[sortedTags[0]];
+      html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+      sortedTags.forEach(function (t) {
+        var w = Math.round(tagCounts[t] / maxTag * 100);
+        html += '<div style="display:flex;align-items:center;gap:10px;">';
+        html += '<div style="width:130px;flex-shrink:0;font-family:\'IBM Plex Mono\',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:var(--text-muted);">' + esc(t) + '</div>';
+        html += '<div style="flex:1;background:var(--surface-2);border-radius:2px;height:16px;overflow:hidden;"><div style="width:' + w + '%;height:100%;background:var(--accent);"></div></div>';
+        html += '<div style="width:36px;flex-shrink:0;text-align:right;font-family:\'IBM Plex Mono\',monospace;font-size:12px;">' + tagCounts[t] + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // recent NO-GOs / major exceptions with photos
+    var exceptions = [];
+    source.forEach(function (d) {
+      (d.areas || []).forEach(function (a) {
+        if (a.score !== null && a.score <= 2) {
+          exceptions.push({
+            car: d.railcarNumber, district: d.district, date: d.date, area: a.name,
+            score: a.score, action: a.exceptionAction, photos: a.exceptionPhotos || []
+          });
+        }
+      });
+    });
+    html += '<div class="card">';
+    html += '<h2><span class="bar" style="background:var(--bad);"></span>NO-GOs &amp; Major Exceptions</h2>';
+    if (!exceptions.length) {
+      html += '<div class="empty">No critical findings logged yet.</div>';
+    } else {
+      exceptions.slice(0, 40).forEach(function (e) {
+        html += '<div class="nogo-row">';
+        if (e.photos.length) {
+          html += '<div class="nogo-photos">';
+          e.photos.slice(0, 2).forEach(function (p) {
+            if (p.sample) {
+              html += '<div class="photo-thumb" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-muted);text-align:center;">sample photo</div>';
+            } else {
+              html += '<a href="' + esc(p.url) + '" target="_blank" rel="noopener"><img src="' + esc(p.url) + '" alt=""></a>';
+            }
+          });
+          html += '</div>';
+        } else {
+          html += '<span class="pill bad" style="flex-shrink:0;">no photo</span>';
+        }
+        html += '<div class="nogo-info"><div class="t">Car ' + esc(e.car) + ' &middot; ' + esc(e.district) + ' &middot; ' + esc(e.area) + ' (' + (e.score === 1 ? "NO-GO" : "score 2") + ')</div>';
+        html += '<div class="s">' + esc(e.date || (showingSample ? "sample date" : "")) + ' &mdash; ' + esc(e.action || "no corrective action noted") + '</div></div>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
+    document.getElementById("viewDash").innerHTML = html;
+    wireDashHandlers();
+  }
+
+  function wireDashHandlers() {
+    var btn = document.getElementById("toggleSampleBtn");
+    if (btn) btn.addEventListener("click", function () { showingSample = !showingSample; renderDash(); });
+    document.querySelectorAll("[data-target-district]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        saveMonthlyTarget(el.getAttribute("data-target-district"), el.value);
+      });
+    });
+  }
+
+  function kpiTile(val, lbl) {
+    return '<div class="kpi-tile"><div class="val mono">' + esc(val) + '</div><div class="lbl">' + esc(lbl) + '</div></div>';
+  }
+
+  function renderLog() {
+    var html = "";
+    html += '<div class="card">';
+    html += '<div class="logtoolbar">';
+    html += '<button class="btn-secondary" id="exportCsvBtn">Export Inspections CSV</button>';
+    html += '<button class="btn-secondary" id="exportCaCsvBtn">Export Corrective Actions CSV</button>';
+    html += '<button class="btn-secondary" id="exportSpBtn" style="border-color:var(--accent);color:var(--accent);">Export for SharePoint</button>';
+    html += '<span class="logcount">' + logDocs.length + ' submitted</span>';
+    html += '</div>';
+    html += '</div>';
+
+    if (!logDocs.length) {
+      html += '<div class="card"><div class="empty">No real inspections submitted yet. They\'ll show up here as soon as the first one comes in.</div></div>';
+    } else {
+      html += '<div class="card">';
+      logDocs.forEach(function (doc, idx) {
+        var pillCls = pillClassFor(doc.avgScore);
+        html += '<div class="logitem" data-logidx="' + idx + '">';
+        html += '<div class="logitem-top">';
+        html += '<div><div class="logitem-title">Car ' + esc(doc.railcarNumber) + ' &middot; ' + esc(doc.district) + '</div>';
+        html += '<div class="logitem-sub">' + esc(doc.date) + ' &middot; ' + esc(doc.shift) + ' &middot; ' + esc(doc.inspectorName) + (isBaseline(doc) ? ' &middot; <span class="stage-tag before">Before cleaning</span>' : ' &middot; After cleaning') + '</div></div>';
+        html += '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">';
+        // Re-derive the letter from the stored % so older records follow the current grade scale.
+        var shownLetter = doc.gradePct !== undefined ? capForCritical(letterForPct(doc.gradePct), (doc.criticalCount || 0) > 0) : doc.gradeLetter;
+        if (shownLetter) html += gradeHtml(shownLetter, doc.gradePct !== undefined ? doc.gradePct.toFixed(0) + "%" : "");
+        html += '<span class="pill ' + pillCls + '">' + (doc.avgScore !== null && doc.avgScore !== undefined ? doc.avgScore.toFixed(1) : "-") + '</span>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="logitem-detail">';
+        html += detailRow("Train", doc.trainNumber);
+        html += detailRow("Yard", doc.yard);
+        html += detailRow("Inspection Type", doc.inspectionType);
+        if (doc.jiraTicket) html += detailRow("Jira Ticket", doc.jiraTicket);
+        html += detailRow("Supervisor", doc.supervisor);
+        html += detailRow("Employee ID", doc.employeeId);
+        html += detailRow("Scheduled / Actual (min)", (doc.scheduledMin != null ? doc.scheduledMin : "-") + " / " + (doc.actualMin != null ? doc.actualMin : "-"));
+        html += detailRow("Total Score", doc.totalScore + " / " + (AREAS.length * 5));
+        html += detailRow("Critical Areas (<=2)", doc.criticalCount);
+        (doc.areas || []).forEach(function (a) {
+          if (a.score !== null && a.score <= 2) {
+            html += detailRow(a.name + " (" + (a.score === 1 ? "NO-GO" : "score 2") + ")", a.exceptionAction || "no action noted");
+            if (a.exceptionPhotos && a.exceptionPhotos.length) {
+              html += '<div class="photo-thumbs" style="margin:4px 0 8px;">';
+              a.exceptionPhotos.forEach(function (p) {
+                html += '<a href="' + esc(p.url) + '" target="_blank" rel="noopener"><div class="photo-thumb"><img src="' + esc(p.url) + '" alt=""></div></a>';
+              });
+              html += '</div>';
+            }
+          }
+        });
+        html += detailRow("Certified By", doc.certifiedName + " on " + doc.certifiedDate);
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    document.getElementById("viewLog").innerHTML = html;
+
+    document.querySelectorAll(".logitem").forEach(function (el) {
+      el.addEventListener("click", function () { el.classList.toggle("open"); });
+    });
+    var exportBtn = document.getElementById("exportCsvBtn");
+    if (exportBtn) exportBtn.addEventListener("click", exportCsv);
+    var exportCaBtn = document.getElementById("exportCaCsvBtn");
+    if (exportCaBtn) exportCaBtn.addEventListener("click", exportCaCsv);
+    var exportSpBtn = document.getElementById("exportSpBtn");
+    if (exportSpBtn) exportSpBtn.addEventListener("click", exportSharePointJson);
+  }
+
+  function detailRow(label, value) {
+    return '<div class="detail-row"><span>' + esc(label) + '</span><span class="mono">' + esc(value == null || value === "" ? "-" : value) + '</span></div>';
+  }
+
+  function csvEscape(v) {
+    var s = String(v == null ? "" : v);
+    if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  // ---- Full-database reads: page through a collection 1,000 at a time (the most one query
+  // returns), so exports and the storage meter see every record, not just the loaded window. ----
+  function fetchAll(coll, field) {
+    var out = [];
+    function page(after) {
+      var q = db.collection(coll).orderBy(field, "asc");
+      if (after !== undefined) q = q.where(field, ">", after);
+      return q.limit(1000).get().then(function (snap) {
+        var docs = snap.docs.map(function (d) { return Object.assign({ _id: d.id }, d.data()); });
+        out = out.concat(docs);
+        var last = docs.length ? docs[docs.length - 1][field] : undefined;
+        if (docs.length === 1000 && last !== undefined) return page(last);
+        return out;
+      });
+    }
+    return page();
+  }
+
+  // ---- Storage meter: the page's database holds 5,000 records total (inspections + corrective
+  // actions + settings). Counted on demand, not on every render. ----
+  var STORAGE_CAP = 5000;
+  var storage = { count: null, inspections: 0, cas: 0, checkedAt: 0, loading: false, error: false };
+  function refreshStorage(force) {
+    if (!db || storage.loading) return;
+    if (!force && storage.checkedAt && (Date.now() - storage.checkedAt) < 5 * 60 * 1000) return;
+    storage.loading = true;
+    Promise.all([fetchAll("inspections", "submittedAt"), fetchAll("correctiveActions", "createdAt")]).then(function (r) {
+      storage.inspections = r[0].length; storage.cas = r[1].length;
+      storage.count = r[0].length + r[1].length + 1; // +1 for the monthly-targets settings record
+      storage.checkedAt = Date.now(); storage.error = false;
+    }).catch(function () { storage.error = true; }).then(function () {
+      storage.loading = false;
+      if (currentTab === "dash") renderDash();
+    });
+  }
+  function storageMeterHtml() {
+    var out = '<div class="card"><h2><span class="bar"></span>Storage</h2>';
+    if (storage.count === null) {
+      out += '<p class="hint" style="margin:0;">' + (storage.error ? "Couldn't count records right now." : "Counting records&hellip;") + '</p></div>';
+      return out;
+    }
+    var pct = Math.min(100, storage.count / STORAGE_CAP * 100);
+    var color = pct >= 85 ? "var(--bad)" : (pct >= 60 ? "var(--warn)" : "var(--good)");
+    out += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">';
+    out += '<div class="mono" style="font-size:20px;font-weight:700;">' + storage.count.toLocaleString() + ' <span style="font-size:12px;color:var(--text-muted);">of ' + STORAGE_CAP.toLocaleString() + ' records</span></div>';
+    out += '<div class="mono" style="font-size:11px;color:var(--text-muted);">' + storage.inspections + ' inspections &middot; ' + storage.cas + ' corrective actions</div></div>';
+    out += '<div class="progress-track" style="height:10px;margin:10px 0 8px;"><div class="progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + color + ';"></div></div>';
+    out += '<p class="hint" style="margin:0;">' + (pct >= 85
+      ? '<strong style="color:var(--bad);">Near capacity.</strong> Export both CSVs to SharePoint and roll up older months now; new inspections will be refused when the database is full.'
+      : pct >= 60
+        ? '<strong style="color:var(--warn);">Plan a rollup.</strong> Export to SharePoint and condense older months before this reaches 85%.'
+        : 'Plenty of room. Keep exporting to SharePoint weekly so it stays the permanent record.') + '</p>';
+    return out + '</div>';
+  }
+
+  // ---- SharePoint-ready exports: stable column names that match the SharePoint list schema,
+  // one row per record, a unique ID per row so the Power Automate import can update instead of
+  // duplicating when the same file (or an overlapping export) is imported twice. ----
+  function areaCol(name) { return "Score_" + name.replace(/[^A-Za-z0-9]+/g, ""); }
+  function saveCsv(filename, header, rows) {
+    var lines = [header.join(",")].concat(rows.map(function (r) { return r.map(csvEscape).join(","); }));
+    if (!downloadsCap) { setStatus("Downloads aren't available in this view.", "err"); return Promise.resolve(); }
+    return downloadsCap.save({ filename: filename, data: lines.join("\n") }).catch(function () {});
+  }
+  function exportCsv() {
+    if (!db) { setStatus("Live storage isn't available in this view right now.", "err"); return; }
+    setStatus("Preparing inspection export…");
+    fetchAll("inspections", "submittedAt").then(function (docs) {
+      var t = inspectionTable(docs);
+      return saveCsv("metra-qc-inspections-" + todayStr() + ".csv", t.header, t.rows).then(function () {
+        setStatus("Exported " + t.rows.length + " inspections.", "ok");
+      });
+    }).catch(function () { setStatus("Export failed. Try again.", "err"); });
+  }
+  function inspectionTable(docs) {
+    {
+      var header = ["InspectionID", "InspectionDate", "SubmittedAt", "District", "Yard", "TrainNumber", "CarNumber", "Shift",
+        "CleaningStage", "InspectionType", "JiraTicket", "Inspector", "Supervisor", "EmployeeID", "ScheduledMin", "ActualMin",
+        "GradePct", "GradeLetter", "AvgAreaScore", "CriticalAreas", "NoGoAreas", "PhotoCount"]
+        .concat(AREAS.map(areaCol)).concat(["DefectNotes", "CertifiedBy", "CertifiedDate"]);
+      var rows = docs.map(function (d) {
+        var areas = d.areas || [];
+        var byName = {}; areas.forEach(function (a) { byName[a.name] = a; });
+        var photos = areas.reduce(function (n, a) { return n + ((a.exceptionPhotos || []).length); }, 0);
+        var notes = areas.filter(function (a) { return a.comments || a.exceptionAction; }).map(function (a) {
+          return a.name + ": " + [a.comments, a.exceptionAction].filter(Boolean).join(" / ");
+        }).join(" | ");
+        var letter = d.gradePct !== undefined ? capForCritical(letterForPct(d.gradePct), (d.criticalCount || 0) > 0) : (d.gradeLetter || "");
+        return [d._id, d.date, d.submittedAt, d.district, d.yard, d.trainNumber, d.railcarNumber, d.shift,
+          isBaseline(d) ? "Before" : "After", d.inspectionType, d.jiraTicket, d.inspectorName, d.supervisor, d.employeeId,
+          d.scheduledMin, d.actualMin, d.gradePct, letter, d.avgScore != null ? Number(d.avgScore).toFixed(2) : "",
+          d.criticalCount, d.noGoCount, photos]
+          .concat(AREAS.map(function (n) { return byName[n] && byName[n].score != null ? byName[n].score : ""; }))
+          .concat([notes, d.certifiedName, d.certifiedDate]);
+      });
+      return { header: header, rows: rows };
+    }
+  }
+  function exportCaCsv() {
+    if (!db) { setStatus("Live storage isn't available in this view right now.", "err"); return; }
+    setStatus("Preparing corrective action export…");
+    fetchAll("correctiveActions", "createdAt").then(function (docs) {
+      var t = caTable(docs);
+      return saveCsv("metra-qc-corrective-actions-" + todayStr() + ".csv", t.header, t.rows).then(function () {
+        setStatus("Exported " + t.rows.length + " corrective actions.", "ok");
+      });
+    }).catch(function () { setStatus("Export failed. Try again.", "err"); });
+  }
+  function caTable(docs) {
+    {
+      var header = ["CorrectiveActionID", "SourceInspectionID", "CarNumber", "District", "Area", "Severity", "DefectDescription",
+        "CorrectiveAction", "ProbableCause", "ConfirmedRootCause", "Owner", "AssignedDate", "DueDate", "Status", "CompletionDate",
+        "ReinspectionID", "ReinspectionResult", "EffectivenessVerified", "VerifiedDate", "Notes"];
+      var rows = docs.map(function (c) {
+        return [c._id, c.sourceInspectionId, c.railcarNumber, c.district, c.area, c.severity, c.defectDescription,
+          c.correctiveActionText, c.probableCause, c.confirmedRootCause, c.owner, c.assignedDate, c.dueDate, c.status,
+          c.completionDate, c.reinspectionId, c.reinspectionResult, c.effectivenessVerified ? "Yes" : "No", c.verifiedDate, c.notes];
+      });
+      return { header: header, rows: rows };
+    }
+  }
+  // One JSON file with both tables, for the Power Automate import. JSON parses natively in
+  // Power Automate (Parse JSON), so notes with commas or line breaks can't break the import.
+  function exportSharePointJson() {
+    if (!db) { setStatus("Live storage isn't available in this view right now.", "err"); return; }
+    if (!downloadsCap) { setStatus("Downloads aren't available in this view.", "err"); return; }
+    setStatus("Preparing SharePoint export…");
+    Promise.all([fetchAll("inspections", "submittedAt"), fetchAll("correctiveActions", "createdAt")]).then(function (r) {
+      var toObjects = function (t) {
+        return t.rows.map(function (row) {
+          var o = {};
+          t.header.forEach(function (h, i) { var v = row[i]; o[h] = (v === undefined || v === null) ? "" : String(v); });
+          return o;
+        });
+      };
+      var payload = { exportedAt: new Date().toISOString(), inspections: toObjects(inspectionTable(r[0])), correctiveActions: toObjects(caTable(r[1])) };
+      return downloadsCap.save({ filename: "metra-qc-sharepoint-" + todayStr() + ".json", data: JSON.stringify(payload) }).then(function () {
+        setStatus("SharePoint export ready: " + payload.inspections.length + " inspections, " + payload.correctiveActions.length + " corrective actions.", "ok");
+      });
+    }).catch(function () { setStatus("Export failed. Try again.", "err"); });
+  }
+
+
+  // ---- Full Dashboard: the original six-tab QC dashboard, embedded as-is. Loaded only the
+  // first time the tab is opened so the inspection form stays fast in the yard. ----
+  function renderFull() {
+    var view = document.getElementById("viewFull");
+    if (view.getAttribute("data-loaded")) return;
+    view.setAttribute("data-loaded", "1");
+    view.innerHTML = '<div class="fullwrap">' +
+      '<iframe class="fullframe" src="full-dashboard.html" title="Full QC Dashboard"></iframe></div>';
+  }
+
+  // ---- Feed real data into the embedded Full Dashboard, and take its edits back ----
+  function pushFullData() {
+    var frame = document.querySelector(".fullframe");
+    if (!frame || !frame.contentWindow) return;
+    try {
+      frame.contentWindow.postMessage({
+        type: "qc-data",
+        connected: !!db && sourceState.log === "ok",
+        inspections: JSON.parse(JSON.stringify(graded(logDocs))),
+        baselineCount: (logDocs || []).filter(isBaseline).length,
+        actions: JSON.parse(JSON.stringify(caDocs || []))
+      }, window.location.origin);
+    } catch (e) {}
+  }
+  window.addEventListener("message", function (e) {
+    if (e.origin !== window.location.origin || !e.data) return;
+    if (e.data.type === "qc-ready") pushFullData();
+    if (e.data.type === "qc-open-new") setTab("new");
+    if (e.data.type === "qc-ca-status" && e.data.id) {
+      var ca = caDocs.find(function (c) { return c._id === e.data.id; });
+      if (!ca) return;
+      var patch;
+      if (e.data.status === "Closed") patch = { status: "Completed", completionDate: todayStr() };
+      else if (e.data.status === "In Progress") patch = { status: "In Progress", completionDate: "" };
+      else patch = { status: "Open", completionDate: "", effectivenessVerified: false, verifiedDate: "" };
+      updateCA(ca._id, patch);
+    }
+  });
+
+  // ---- tabs ----
+  function setTab(tab) {
+    currentTab = tab;
+    document.getElementById("tabBtnNew").classList.toggle("active", tab === "new");
+    document.getElementById("tabBtnLog").classList.toggle("active", tab === "log");
+    document.getElementById("tabBtnCA").classList.toggle("active", tab === "ca");
+    document.getElementById("tabBtnDash").classList.toggle("active", tab === "dash");
+    document.getElementById("viewNew").style.display = tab === "new" ? "" : "none";
+    document.getElementById("viewLog").style.display = tab === "log" ? "" : "none";
+    document.getElementById("viewCA").style.display = tab === "ca" ? "" : "none";
+    document.getElementById("viewDash").style.display = tab === "dash" ? "" : "none";
+    document.getElementById("tabBtnFull").classList.toggle("active", tab === "full");
+    document.getElementById("viewFull").style.display = tab === "full" ? "" : "none";
+    document.querySelector(".infobar").style.display = tab === "full" ? "none" : "";
+    document.querySelector(".wrap").style.maxWidth = tab === "full" ? "1200px" : "";
+    if (tab === "full") { subscribeLog(); subscribeCA(); renderFull(); pushFullData(); }
+    document.getElementById("submitBar").style.display = tab === "new" ? "" : "none";
+    if (tab === "log") { subscribeLog(); renderLog(); }
+    if (tab === "ca") { subscribeCA(); renderCA(); }
+    if (tab === "dash") { subscribeLog(); subscribeCA(); subscribeTargets(); renderDash(); }
+  }
+  document.getElementById("tabBtnNew").addEventListener("click", function () { setTab("new"); });
+  document.getElementById("tabBtnLog").addEventListener("click", function () { setTab("log"); });
+  document.getElementById("tabBtnCA").addEventListener("click", function () { setTab("ca"); });
+  document.getElementById("tabBtnDash").addEventListener("click", function () { setTab("dash"); });
+  document.getElementById("tabBtnFull").addEventListener("click", function () { setTab("full"); });
+  document.getElementById("submitBtn").addEventListener("click", submit);
+
+  applyDisplayMode(loadDisplayMode());
+  document.getElementById("modeToggleBtn").addEventListener("click", function () {
+    var next = loadDisplayMode() === "daylight" ? "tactical" : "daylight";
+    saveDisplayMode(next);
+    applyDisplayMode(next);
+  });
+
+  var beaconBtnEl = document.getElementById("beaconBtn");
+  var beaconPanelEl = document.getElementById("beaconPanel");
+  beaconBtnEl.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var open = beaconPanelEl.classList.toggle("open");
+    beaconBtnEl.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", function () { beaconPanelEl.classList.remove("open"); beaconBtnEl.setAttribute("aria-expanded", "false"); });
+  renderBeacon();
+
+  renderNew();
+  refreshSuggestDatalists();
+  bootCapabilities();
+})();
+</script>
+
+</body></html>
